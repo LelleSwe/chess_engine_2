@@ -1,0 +1,1 @@
+gcc main.c board.c uci.c -o main.elf -O3 -march=native -Wall
