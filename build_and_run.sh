@@ -1,2 +1,0 @@
-./build.sh
-./main.elf
