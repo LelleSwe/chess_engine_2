@@ -45,6 +45,19 @@ const board default_start_board = {0x000000000000FF00UL,
                                    0,
                                    0};
 
+int board_cmp(board *a, board *b) {
+   return (a->wpa_bb == b->wpa_bb) && (a->wbi_bb == b->wbi_bb) &&
+          (a->wro_bb == b->wro_bb) && (a->wqu_bb == b->wqu_bb) &&
+          (a->wki_bb == b->wki_bb) && (a->wkn_bb == b->wkn_bb) &&
+          (a->wcb_bb == b->wcb_bb) && (a->bpa_bb == b->bpa_bb) &&
+          (a->bbi_bb == b->bbi_bb) && (a->bro_bb == b->bro_bb) &&
+          (a->bqu_bb == b->bqu_bb) && (a->bki_bb == b->bki_bb) &&
+          (a->bkn_bb == b->bkn_bb) && (a->bcb_bb == b->bcb_bb) &&
+          (a->white_castle == b->white_castle) &&
+          (a->black_castle == b->black_castle) &&
+          (a->white_enp == b->white_enp) && (a->black_enp == b->black_enp);
+}
+
 /// Does not check for move legality.
 /// Undefined behaviour if trying to capture one's own pieces.
 /// Use castle() for castling pieces.

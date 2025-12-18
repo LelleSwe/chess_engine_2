@@ -79,5 +79,9 @@ typedef struct {
 
 #endif
 
+// Generates a default chess board, with pieces.
 board gen_start_board();
 void from_long_algebraic(char *alg_string, board *_board);
+// Compares two boards for equality.
+// only nonzero if all fields of the board struct are equal.
+int board_cmp(board *a, board *b);

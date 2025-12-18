@@ -1,3 +1,10 @@
-unity testing framework, includeable like #include <unity/unity.h> (https://github.com/ThrowTheSwitch/Unity)
+built on x86 linux, no guarantee of it working on other systems :P
+
+"make" will install following libraries (if missing) and run tests and compile main executable:
+run with "make install" to avoid compilation
+unity testing framework, includeable like #include "lib/unity.h" (https://github.com/ThrowTheSwitch/Unity)
 fastchess located in ./fastchess folder (https://github.com/Disservin/fastchess)
 
+"make main" compiles the main executable, which can then be run and interacted with using a UCI tool
+"make test" compiles main and additionally the unit tests binary, and then runs both unit tests and the UCI test from ./fastchess
+"make unit" compiles and runs just the unit tests
