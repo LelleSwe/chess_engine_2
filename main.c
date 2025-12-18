@@ -1,15 +1,18 @@
 #include "board.h"
-#include "debug_io.c"
-#include <pthread.h>
+#include "debug_io.h"
 #include "uci.h"
+#include <pthread.h>
+#include <stdio.h>
 
 int main() {
-    board board = gen_start_board();
-    
-    pthread_t uci_id = 1;
-    pthread_create(&uci_id, NULL, start_uci, NULL);
-    //pthread_join(uci_id, NULL);
+   // Generate starting board
+   board board = gen_start_board();
 
-    print_board(&board);
-    return 0;
+   // Start UCI thread
+   pthread_t uci_id = 69;
+   pthread_create(&uci_id, NULL, start_uci, &board);
+   pthread_join(uci_id, NULL);
+
+   // print_board(&board);
+   return 0;
 }
