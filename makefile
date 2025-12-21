@@ -9,18 +9,17 @@ LIB = $(wildcard lib/*.c) $(wildcard lib/*.h)
 EXEC_OUT = target/main
 TEST_OUT = target/test
 
-all: install clean main test
+all: install main test
 
-main: clean $(SRC)
+main: $(SRC)
 	$(CC) $(SRC) $(CFLAGS) main.c -o $(EXEC_OUT)
 
 # -lunity -I/usr/include/unity /usr/lib/libunity.a 
-test: clean $(SRC) $(TEST) main
-	$(CC) $(LIB) $(SRC) $(TEST) $(CFLAGS) test.c -o $(TEST_OUT)
-	./target/test
+test: $(SRC) $(TEST) main
+	$(MAKE) unit
 	$(MAKE) uci
 
-unit: clean $(SRC) $(TEST)
+unit: $(SRC) $(TEST)
 	$(CC) $(LIB) $(SRC) $(TEST) $(CFLAGS) test.c -o $(TEST_OUT)
 	./target/test
 

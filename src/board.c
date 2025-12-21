@@ -22,7 +22,6 @@ inline board gen_start_board() {
                    0xFFFF000000000000UL,
                    3,
                    3,
-                   0,
                    0};
    return board_;
 }
@@ -43,10 +42,9 @@ const board default_start_board = {0x000000000000FF00UL,
                                    0xFFFF000000000000UL,
                                    3,
                                    3,
-                                   0,
                                    0};
 
-bool board_cmp(const board *a, const board *b) {
+inline bool board_cmp(const board *a, const board *b) {
    return (a->wpa_bb == b->wpa_bb) && (a->wbi_bb == b->wbi_bb) &&
           (a->wro_bb == b->wro_bb) && (a->wqu_bb == b->wqu_bb) &&
           (a->wki_bb == b->wki_bb) && (a->wkn_bb == b->wkn_bb) &&
@@ -55,24 +53,23 @@ bool board_cmp(const board *a, const board *b) {
           (a->bqu_bb == b->bqu_bb) && (a->bki_bb == b->bki_bb) &&
           (a->bkn_bb == b->bkn_bb) && (a->bcb_bb == b->bcb_bb) &&
           (a->white_castle == b->white_castle) &&
-          (a->black_castle == b->black_castle) &&
-          (a->white_enp == b->white_enp) && (a->black_enp == b->black_enp);
+          (a->black_castle == b->black_castle) && (a->enp == b->enp);
 }
 
-bool move_cmp(const move *a, const move *b) {
+inline bool move_cmp(const move *a, const move *b) {
    return (a->to_play == b->to_play) && (a->capture == b->capture) &&
           (a->castle == b->castle) && (a->from == b->from) &&
           (a->pc == b->pc) && (a->to == b->to);
 }
 
-bitboa brd_from_pos(const char *pos) {
+inline bitboa brd_from_pos(const char *pos) {
    int ffile = pos[0] - 'a';
    int frank = pos[1] - '1';
    bitboa brd = (1UL << (7UL - ffile)) * (1UL << (frank * 8UL));
    return brd;
 }
 
-bitboa comb_from_comp(const board *brd, bool to_play) {
+inline bitboa comb_from_comp(const board *brd, bool to_play) {
    bitboa ret;
    if (to_play) {
       ret = brd->bpa_bb | brd->bbi_bb | brd->bro_bb | brd->bqu_bb |
@@ -144,7 +141,19 @@ void flip_piece(board *brd, const piece pc, const bool to_play,
    }
 }
 
-bool try_castle(board *brd, const move *mov) {
+inline void try_capture(board *brd, const move *mov) {
+   if (mov->to_play) {
+      if (brd->wcb_bb & mov->to) {
+         flip_piece(brd, mov->capture, false, mov->to);
+      }
+   } else {
+      if (brd->bcb_bb & mov->to) {
+         flip_piece(brd, mov->capture, true, mov->to);
+      }
+   }
+}
+
+inline bool try_castle(board *brd, const move *mov) {
    if (mov->to_play) {
       // short castle black
       if (((mov->castle & SHORT_CASTLE) != 0) && (mov->pc == KING) &&
@@ -155,7 +164,7 @@ bool try_castle(board *brd, const move *mov) {
          flip_piece(brd, ROOK, true, brd_from_pos("h8"));
          flip_piece(brd, ROOK, true, brd_from_pos("f8"));
          brd->black_castle = NO_CASTLE;
-         brd->black_enp = 0;
+         brd->enp = 0;
          return true;
       }
       // long castle black
@@ -167,7 +176,7 @@ bool try_castle(board *brd, const move *mov) {
          flip_piece(brd, ROOK, true, brd_from_pos("a8"));
          flip_piece(brd, ROOK, true, brd_from_pos("d8"));
          brd->black_castle = NO_CASTLE;
-         brd->black_enp = 0;
+         brd->enp = 0;
          return true;
       }
    } else {
@@ -180,7 +189,7 @@ bool try_castle(board *brd, const move *mov) {
          flip_piece(brd, ROOK, false, brd_from_pos("h1"));
          flip_piece(brd, ROOK, false, brd_from_pos("f1"));
          brd->white_castle = NO_CASTLE;
-         brd->white_enp = 0;
+         brd->enp = 0;
          return true;
       }
       // long castle white
@@ -192,10 +201,37 @@ bool try_castle(board *brd, const move *mov) {
          flip_piece(brd, ROOK, false, brd_from_pos("a1"));
          flip_piece(brd, ROOK, false, brd_from_pos("d1"));
          brd->white_castle = NO_CASTLE;
-         brd->white_enp = 0;
+         brd->enp = 0;
          return true;
       }
    }
+   return false;
+}
+
+inline bool try_promote(board *brd, const move *mov) {
+   if (mov->promotion != NO_PIECE) {
+      flip_piece(brd, PAWN, mov->to_play, mov->from);
+      flip_piece(brd, mov->promotion, mov->to_play, mov->to);
+      try_capture(brd, mov);
+      return true;
+   }
+   return false;
+}
+
+inline bool try_en_passant(board *brd, const move *mov) {
+   if (brd->enp) {
+      if ((mov->pc == PAWN) &&
+          ((__builtin_clzll(mov->from) % 8) !=
+           (__builtin_clzll(mov->to) % 8)) &&
+          (get_piece(brd, mov->to) == NO_PIECE)) {
+         flip_piece(brd, PAWN, !(mov->to_play), brd->enp);
+         flip_piece(brd, PAWN, mov->to_play, mov->from);
+         flip_piece(brd, PAWN, mov->to_play, mov->to);
+         brd->enp = 0;
+         return true;
+      }
+   }
+   brd->enp = mov->en_passant;
    return false;
 }
 
@@ -205,27 +241,16 @@ bool try_castle(board *brd, const move *mov) {
 void make_move(board *brd, const move *mov) {
    if (try_castle(brd, mov))
       return;
-   if (mov->en_passant) {
-      puts("ERROR: en_passant not implemented.");
-      exit(EXIT_FAILURE);
+   if (try_promote(brd, mov))
       return;
-   }
+   if (try_en_passant(brd, mov))
+      return;
 
    // move piece
    flip_piece(brd, mov->pc, mov->to_play, mov->from);
-   if (mov->to_play) {
-      flip_piece(brd, mov->pc, true, mov->to);
-      if (brd->wcb_bb & mov->to) {
-         piece scrap = get_piece(brd, mov->to);
-         flip_piece(brd, scrap, false, mov->to);
-      }
-   } else {
-      flip_piece(brd, mov->pc, false, mov->to);
-      if (brd->bcb_bb & mov->to) {
-         piece scrap = get_piece(brd, mov->to);
-         flip_piece(brd, scrap, true, mov->to);
-      }
-   }
+   flip_piece(brd, mov->pc, mov->to_play, mov->to);
+   try_capture(brd, mov);
+
    // King castling rights
    if (mov->pc == KING && (brd->black_castle | brd->white_castle)) {
       if (mov->to_play) {
@@ -234,12 +259,7 @@ void make_move(board *brd, const move *mov) {
          brd->white_castle = 0;
       }
    }
-   // En passant rights
-   if (mov->to_play) {
-      brd->black_enp = 0;
-   } else {
-      brd->white_enp = 0;
-   }
+
    // Rook castling rights
    if (mov->pc == ROOK) {
       // if white's turn
@@ -266,63 +286,6 @@ void make_move(board *brd, const move *mov) {
       }
    }
 }
-// void make_move(board *board_, const move *move_) {
-//    // Sets the corresponding piece.
-//    ((bitboa *)board_)[move_->piece + 7 * move_->to_play] ^= move_->from;
-//    ((bitboa *)board_)[move_->piece + 7 * move_->to_play] ^= move_->to;
-//    // Sets the combined bitboard_->
-//    ((bitboa *)board_)[6 + 7 * move_->to_play] ^= move_->from;
-//    ((bitboa *)board_)[6 + 7 * move_->to_play] ^= move_->to;
-//
-//    // Find out (if any) which piece is occupying next position
-//    if (((bitboa *)board_)[6 + 7 * (1 - move_->to_play)] & move_->to) {
-//       for (int i = 0; i < 6; i++) {
-//          if (((bitboa *)board_)[i + 7 * (1 - move_->to_play)] & move_->to)
-//          {
-//             ((bitboa *)board_)[i + 7 * (1 - move_->to_play)] ^= move_->to;
-//             ((bitboa *)board_)[6 + 7 * (1 - move_->to_play)] ^= move_->to;
-//             break;
-//          }
-//       }
-//    }
-//    // King castling rights
-//    if (move_->piece == 5 && (board_->black_castle | board_->white_castle))
-//    {
-//       if (move_->to_play) {
-//          board_->black_castle = 0;
-//       } else {
-//          board_->white_castle = 0;
-//       }
-//    }
-//    // En passant rights
-//    if (move_->to_play) {
-//       board_->black_enp = 0;
-//    } else {
-//       board_->white_enp = 0;
-//    }
-//    // Rook castling rights
-//    if (move_->piece == 2) {
-//       if (move_->to_play == 0) {
-//          if (board_->white_castle && (move_->from & board_->wro_bb)) {
-//             if ((move_->from & board_->wro_bb) == 1) {
-//                board_->white_castle ^= 1;
-//             } else {
-//                board_->white_castle ^= 2;
-//             }
-//          }
-//       } else {
-//          if (board_->black_castle && (move_->from & board_->bro_bb)) {
-//             if ((move_->from & board_->bro_bb) == 0x1000000000000) {
-//                board_->black_castle ^= 1;
-//             } else {
-//                board_->black_castle ^= 2;
-//             }
-//          }
-//       }
-//    }
-//
-//    return;
-// }
 
 /// Gets the piece type at the position asked.
 /// Position is a bitboard.
@@ -361,28 +324,52 @@ piece get_piece(const board *brd, const bitboa position) {
    }
 
    // Something is wrong.
-   printf("position: %llu has neither a piece nor no piece on it.", position);
+   printf("ERROR: position: %llu has neither a piece nor no piece on it.",
+          position);
+   exit(EXIT_FAILURE);
    return -1;
 }
 
 void from_long_alg_single(move *to_move, const board *_board,
                           const char *single_fen, const bool to_play) {
-   int ffile = single_fen[0] - 'a';
-   int frank = single_fen[1] - '1';
-   bitboa from_board = (1UL << (7UL - ffile)) * (1UL << (frank * 8UL));
+   bitboa ffile = single_fen[0] - 'a';
+   bitboa frank = single_fen[1] - '1';
+   bitboa from_board = (1ULL << (7ULL - ffile)) * (1ULL << (frank * 8ULL));
 
-   int tfile = single_fen[2] - 'a';
-   int trank = single_fen[3] - '1';
-   bitboa to_board = (1UL << (7UL - tfile)) * (1UL << (trank * 8UL));
+   bitboa tfile = single_fen[2] - 'a';
+   bitboa trank = single_fen[3] - '1';
+   bitboa to_board = (1ULL << (7ULL - tfile)) * (1ULL << (trank * 8ULL));
+   piece promotion;
+   if (!isspace(single_fen[4])) {
+      switch (single_fen[4]) {
+      case 'r':
+         promotion = ROOK;
+         break;
+      case 'q':
+         promotion = QUEEN;
+         break;
+      case 'n':
+         promotion = KNIGHT;
+         break;
+      case 'b':
+         promotion = BISHOP;
+         break;
+      default:
+         promotion = NO_PIECE;
+         break;
+      }
+   } else {
+      promotion = NO_PIECE;
+   }
 
    // printf("move: \"%s\"\n (to %c%c)", single_fen, single_fen[2],
-   // single_fen[3]); printf("from: %llu\n", from_board); printf("to:
-   // %llu\n", to_board);
+   // single_fen[3]); printf("from: %llu\n", from_board); printf("to: %llu\n",
+   // to_board);
 
-   assert(0 <= ffile && ffile < 8);
-   assert(0 <= frank && frank < 8);
-   assert(0 <= tfile && tfile < 8);
-   assert(0 <= trank && trank < 8);
+   assert(ffile < 8);
+   assert(frank < 8);
+   assert(tfile < 8);
+   assert(trank < 8);
 
    piece mov_pc = get_piece(_board, from_board);
    piece cap_pc = get_piece(_board, to_board);
@@ -392,17 +379,23 @@ void from_long_alg_single(move *to_move, const board *_board,
    to_move->capture = cap_pc;
    to_move->to_play = to_play;
    to_move->castle = to_play ? _board->black_castle : _board->white_castle;
+   to_move->promotion = promotion;
 
    // TODO: placeholders!
    // if e1c1 king, then castle_long
    // if e1g1 king, then castle_short
-   to_move->en_passant = false;
+   to_move->en_passant = 0;
+   if (mov_pc == PAWN) {
+      if ((trank - frank == (bitboa)(-2)) || (trank - frank == 2)) {
+         to_move->en_passant = to_board;
+      }
+   }
 }
 
 #include "debug_io.h"
 
 void from_long_algebraic(char *alg_string, board *_board) {
-   memcpy(_board, &default_start_board, sizeof(board));
+   *_board = gen_start_board();
 
    bool to_play = false;
    int idx = 0;

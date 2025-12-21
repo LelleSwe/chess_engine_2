@@ -104,7 +104,7 @@ void print_move(move *_move) {
    case KNIGHT:
       pc = 'n';
       break;
-   case NO_PIECE:
+   default:
       pc = '.';
       break;
    }

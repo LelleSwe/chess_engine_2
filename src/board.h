@@ -67,12 +67,9 @@ typedef struct {
    /// 2 = long castle.
    /// 3 = both.
    castle_right black_castle;
-   /// White en passant.
+   /// En passant.
    /// Overlaps the pawn that can passant.
-   bitboa white_enp;
-   /// Black en passant.
-   /// Overlaps the pawn that can passant.
-   bitboa black_enp;
+   bitboa enp;
 } board;
 
 extern const board default_start_board;
@@ -93,9 +90,11 @@ typedef struct {
    bitboa to;
    piece pc;
    piece capture;
+   piece promotion;
    castle_right castle;
    bool to_play;
-   bool en_passant;
+   bool do_passant;
+   bitboa en_passant;
 } move;
 
 #endif
@@ -116,3 +115,7 @@ piece get_piece(const board *brd, const bitboa position);
 void flip_piece(board *brd, const piece pc, const bool to_play,
                 const bitboa place);
 bool try_castle(board *brd, const move *mov);
+bool try_promote(board *brd, const move *mov);
+void try_capture(board *brd, const move *mov);
+bool try_en_passant(board *brd, const move *mov);
+void make_move(board *brd, const move *mov);
