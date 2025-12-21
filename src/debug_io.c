@@ -83,43 +83,43 @@ void repeat(char *str, int len, char to) {
 }
 
 void print_move(move *_move) {
-   char piece;
+   char pc;
 
-   switch (_move->piece) {
-   case 0:
-      piece = 'p';
+   switch (_move->pc) {
+   case PAWN:
+      pc = 'p';
       break;
-   case 1:
-      piece = 'b';
+   case BISHOP:
+      pc = 'b';
       break;
-   case 2:
-      piece = 'r';
+   case ROOK:
+      pc = 'r';
       break;
-   case 3:
-      piece = 'q';
+   case QUEEN:
+      pc = 'q';
       break;
-   case 4:
-      piece = 'k';
+   case KING:
+      pc = 'k';
       break;
-   case 5:
-      piece = 'n';
+   case KNIGHT:
+      pc = 'n';
       break;
-   default:
-      piece = '.';
+   case NO_PIECE:
+      pc = '.';
       break;
    }
 
-   if (!_move->to_play && piece != '.') {
-      piece -= 32;
+   if (!_move->to_play && pc != '.') {
+      pc -= 32;
    }
 
    char from_str[65];
    repeat(from_str, 64, '.');
-   from_str[__builtin_clzl(_move->from)] = piece;
+   from_str[__builtin_clzl(_move->from)] = pc;
 
    char to_str[65];
    repeat(to_str, 64, '.');
-   to_str[__builtin_clzl(_move->to)] = piece;
+   to_str[__builtin_clzl(_move->to)] = pc;
 
    printf("Moving from:");
    print_board_str(from_str);

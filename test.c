@@ -6,7 +6,6 @@ void setUp() {}
 void tearDown() {}
 
 int main() {
-   UNITY_BEGIN();
-   RUN_TEST(set_up_board);
-   return UNITY_END();
+   int test_board = run_test_board();
+   return test_board;
 }
