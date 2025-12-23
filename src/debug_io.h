@@ -1,6 +1,6 @@
 #include "board.h"
-#include <stdio.h>
 
-void print_board(board *_board);
-void print_move(move *_move);
-
+void print_board(const board *_board);
+void print_move(const move *_move);
+void print_board_internal(const board *brd);
+void print_mov_internal(const move *mov);

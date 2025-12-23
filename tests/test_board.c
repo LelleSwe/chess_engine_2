@@ -2,13 +2,6 @@
 #include "../src/board.h"
 #include "../src/debug_io.h"
 
-// void test_algebraic() {
-//    char input_str[] = "e2e3 e1e2 e2e3\0";
-//    board _board = from_long_algebraic(input_str);
-//
-//    print_board(&_board);
-// }
-
 void test_set_up_board() {
    board brd = gen_start_board();
    bool equal = board_cmp(&default_start_board, &brd);
@@ -29,8 +22,15 @@ void test_get_move_from_single_string() {
    board brd = gen_start_board();
    move mov = {};
    from_long_alg_single(&mov, &brd, "e2e4", false);
-   move expected1 = {0x800UL,     0x8000000UL, PAWN,  NO_PIECE, NO_PIECE,
-                     BOTH_CASTLE, false,       false, 0};
+   move expected1 = {.from = 0x800UL,
+                     .to = 0x8000000UL,
+                     .pc = PAWN,
+                     .capture = NO_PIECE,
+                     .promotion = NO_PIECE,
+                     .castle = BOTH_CASTLE,
+                     .to_play = false,
+                     .en_passant = brd_from_pos("e4"),
+                     .prev_en_passant = 0};
    TEST_ASSERT(move_cmp(&expected1, &mov));
 }
 
@@ -90,8 +90,8 @@ void test_castle_short() {
                NO_PIECE,
                BOTH_CASTLE,
                false,
-               false,
-               0};
+               0,
+               .prev_en_passant = 0};
 
    bool castled = try_castle(&brd, &mov);
    TEST_ASSERT(castled);
@@ -124,8 +124,8 @@ void test_castle_short() {
                 NO_PIECE,
                 SHORT_CASTLE,
                 true,
-                false,
-                0};
+                0,
+                .prev_en_passant = 0};
    bool castled2 = try_castle(&brd, &mov2);
    TEST_ASSERT(castled2);
    board expect2 = {0,
@@ -179,8 +179,8 @@ void test_castle_long() {
                NO_PIECE,
                BOTH_CASTLE,
                false,
-               false,
-               0};
+               0,
+               .prev_en_passant = 0};
 
    bool castled = try_castle(&brd, &mov);
    TEST_ASSERT(castled);
@@ -269,8 +269,8 @@ void test_castle_checks() {
                   NO_PIECE,
                   BOTH_CASTLE,
                   false,
-                  false,
-                  0};
+                  0,
+                  .prev_en_passant = 0};
 
       bool castled = try_castle(&brd, &mov);
       TEST_ASSERT_MESSAGE(!castled, "Castled even though king wasn't present.");
@@ -325,8 +325,8 @@ void test_castle_checks() {
                   NO_PIECE,
                   SHORT_CASTLE,
                   false,
-                  false,
-                  0};
+                  0,
+                  .prev_en_passant = 0};
 
       bool castled = try_castle(&brd, &mov);
       TEST_ASSERT_MESSAGE(!castled, "Tried to castle long when forbidden.");
@@ -440,6 +440,217 @@ void test_en_passant() {
    TEST_ASSERT_MESSAGE(board_cmp(&expect, &brd), "Final boards not equal");
 }
 
+void test_from_algebraic() {
+   vec_move moves = new_vec_move(200);
+   char input_str[] = "e2e4 d7d5 e4d5 g8f6 d1f3 c7c5 d5c6 d8b6 c6c7 c8d7 c7b8r "
+                      "h7h6 f1e2 h6h5 g1h3 h5h4 e1g1\0";
+   board brd;
+   from_long_algebraic(input_str, &brd, &moves);
+
+   board expect = gen_start_board();
+   // setup pawns
+   flip_piece(&expect, PAWN, true, brd_from_pos("c7"));
+   flip_piece(&expect, PAWN, true, brd_from_pos("h7"));
+   flip_piece(&expect, PAWN, true, brd_from_pos("d7"));
+   flip_piece(&expect, PAWN, true, brd_from_pos("h4"));
+   flip_piece(&expect, PAWN, false, brd_from_pos("e2"));
+   // setup queens
+   flip_piece(&expect, QUEEN, true, brd_from_pos("d8"));
+   flip_piece(&expect, QUEEN, true, brd_from_pos("b6"));
+   flip_piece(&expect, QUEEN, false, brd_from_pos("d1"));
+   flip_piece(&expect, QUEEN, false, brd_from_pos("f3"));
+   // setup knights
+   flip_piece(&expect, KNIGHT, true, brd_from_pos("b8"));
+   flip_piece(&expect, KNIGHT, true, brd_from_pos("g8"));
+   flip_piece(&expect, KNIGHT, true, brd_from_pos("f6"));
+   flip_piece(&expect, KNIGHT, false, brd_from_pos("g1"));
+   flip_piece(&expect, KNIGHT, false, brd_from_pos("h3"));
+   // setup rooks
+   flip_piece(&expect, ROOK, false, brd_from_pos("b8"));
+   flip_piece(&expect, ROOK, false, brd_from_pos("h1"));
+   flip_piece(&expect, ROOK, false, brd_from_pos("f1"));
+   // setup bishops
+   flip_piece(&expect, BISHOP, false, brd_from_pos("f1"));
+   flip_piece(&expect, BISHOP, false, brd_from_pos("e2"));
+   flip_piece(&expect, BISHOP, true, brd_from_pos("c8"));
+   flip_piece(&expect, BISHOP, true, brd_from_pos("d7"));
+   // setup kings
+   flip_piece(&expect, KING, false, brd_from_pos("e1"));
+   flip_piece(&expect, KING, false, brd_from_pos("g1"));
+   expect.white_castle = 0;
+
+   TEST_ASSERT(board_cmp(&expect, &brd));
+}
+
+DECLARE_VEC(board)
+DEFINE_VEC(board)
+void test_undo_moves() {
+   vec_move moves = new_vec_move(200);
+   char input_str[] = "e2e4 d7d5 e4d5 g8f6 d1f3 c7c5 d5c6 d8b6 c6c7 c8d7 c7b8r "
+                      "h7h6 f1e2 h6h5 g1h3 h5h4 e1g1\0";
+   board brd;
+   from_long_algebraic(input_str, &brd, &moves);
+   vec_board boards = new_vec_board(200);
+   vec_push_board(&boards, gen_start_board());
+   for (size_t i = 0; i < moves.size; i++) {
+      board prev_brd = vec_get_board(&boards, i);
+      move prev_mov = vec_get_move(&moves, i);
+      make_move(&prev_brd, &prev_mov);
+      vec_push_board(&boards, prev_brd);
+   }
+
+   // printf("Move %zu:\n", boards.size - 1);
+   // board last = vec_get_board(&boards, boards.size - 1);
+   // print_board(&brd);
+   // print_board(&last);
+   // print_board_internal(&brd);
+   // print_board_internal(&last);
+
+   board expect = gen_start_board();
+   for (size_t i = moves.size - 1; i < SIZE_MAX; i--) {
+      // move mov = vec_get_move(&moves, i);
+      // print_mov_internal(&mov);
+
+      // printf("Move %zu:\n", i);
+      // board prev_brd = vec_get_board(&boards, i);
+      pop_move(&brd, &moves);
+      // print_board(&brd);
+      // print_board(&prev_brd);
+      // print_board_internal(&brd);
+      // print_board_internal(&prev_brd);
+   }
+
+   // print_board_internal(&brd);
+   // print_board_internal(&expect);
+   TEST_ASSERT(board_cmp(&expect, &brd));
+}
+
+void test_undo_en_passant() {
+   board brd = {brd_from_pos("e2"),
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                brd_from_pos("d4"),
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0};
+   brd.wcb_bb = comb_from_comp(&brd, false);
+   brd.bcb_bb = comb_from_comp(&brd, true);
+
+   move mov1;
+   move mov2;
+
+   from_long_alg_single(&mov1, &brd, "e2e4", false);
+   TEST_ASSERT_MESSAGE(mov1.pc == PAWN, "Didn't move pawn");
+   TEST_ASSERT_MESSAGE(mov1.en_passant != 0, "Didn't catch passantable");
+   // print_board(&brd);
+   make_move(&brd, &mov1);
+   TEST_ASSERT_MESSAGE(brd.enp != 0, "Board didn't record passantable");
+   // print_board(&brd);
+
+   from_long_alg_single(&mov2, &brd, "d4e3", true);
+   TEST_ASSERT_MESSAGE(mov2.pc == PAWN, "Didn't move pawn");
+   TEST_ASSERT_MESSAGE(mov2.en_passant == 0,
+                       "Labled unpassantable passantable");
+   make_move(&brd, &mov2);
+   TEST_ASSERT_MESSAGE(brd.enp == 0, "Board didn't clear passantable");
+   // print_board(&brd);
+
+   board expect = {brd_from_pos("e2"),
+                   0,
+                   0,
+                   0,
+                   0,
+                   0,
+                   0,
+                   brd_from_pos("d4"),
+                   0,
+                   0,
+                   0,
+                   0,
+                   0,
+                   0,
+                   0,
+                   0,
+                   0};
+   expect.bcb_bb = comb_from_comp(&expect, true);
+   expect.wcb_bb = comb_from_comp(&expect, false);
+   undo_move(&brd, &mov2);
+   // print_board(&brd);
+   undo_move(&brd, &mov1);
+   // print_board(&brd);
+
+   // print_board_internal(&brd);
+   // print_board_internal(&expect);
+   TEST_ASSERT_MESSAGE(board_cmp(&expect, &brd), "Final boards not equal");
+}
+
+void test_undo_castle_short() {
+   board brd = {0,
+                0,
+                brd_from_pos("a1") | brd_from_pos("h1"),
+                0,
+                brd_from_pos("e1"),
+                0,
+                0,
+                0,
+                0,
+                brd_from_pos("a8") | brd_from_pos("h8"),
+                0,
+                brd_from_pos("e8"),
+                0,
+                0,
+                BOTH_CASTLE,
+                BOTH_CASTLE,
+                0};
+   brd.wcb_bb = comb_from_comp(&brd, false);
+   brd.bcb_bb = comb_from_comp(&brd, true);
+   board expect = brd;
+
+   // white castle
+   move mov = {brd_from_pos("e1"),
+               brd_from_pos("g1"),
+               KING,
+               NO_PIECE,
+               NO_PIECE,
+               BOTH_CASTLE,
+               false,
+               0,
+               .prev_en_passant = 0};
+
+   bool castled = try_castle(&brd, &mov);
+   TEST_ASSERT(castled);
+   board expect2 = brd;
+
+   // black castle
+   move mov2 = {brd_from_pos("e8"),
+                brd_from_pos("g8"),
+                KING,
+                NO_PIECE,
+                NO_PIECE,
+                BOTH_CASTLE,
+                true,
+                0,
+                .prev_en_passant = 0};
+   bool castled2 = try_castle(&brd, &mov2);
+   TEST_ASSERT(castled2);
+   try_undo_castle(&brd, &mov2);
+   // print_board_internal(&brd);
+   // print_board_internal(&expect2);
+   TEST_ASSERT_MESSAGE(board_cmp(&brd, &expect2), "first undo failed");
+   try_undo_castle(&brd, &mov);
+   TEST_ASSERT_MESSAGE(board_cmp(&brd, &expect), "second undo failed");
+}
+
 int run_test_board() {
    UNITY_BEGIN();
    RUN_TEST(test_set_up_board);
@@ -452,5 +663,9 @@ int run_test_board() {
    RUN_TEST(test_capture);
    RUN_TEST(test_promotion);
    RUN_TEST(test_en_passant);
+   RUN_TEST(test_from_algebraic);
+   RUN_TEST(test_undo_en_passant);
+   RUN_TEST(test_undo_castle_short);
+   RUN_TEST(test_undo_moves);
    return UNITY_END();
 }

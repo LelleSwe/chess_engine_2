@@ -1,3 +1,4 @@
+#include "util.h"
 #ifndef BOARD_DEF
 #define BOARD_DEF
 
@@ -93,24 +94,25 @@ typedef struct {
    piece promotion;
    castle_right castle;
    bool to_play;
-   bool do_passant;
    bitboa en_passant;
+   bitboa prev_en_passant;
 } move;
 
+DECLARE_VEC(move)
 #endif
 
 // Generates a default chess board, with pieces.
 board gen_start_board();
-void from_long_algebraic(char *alg_string, board *_board);
+void from_long_algebraic(const char *alg_string, board *_board,
+                         vec_move *moves);
 void from_long_alg_single(move *to_move, const board *_board,
                           const char *single_fen, const bool to_play);
 bitboa brd_from_pos(const char *pos);
 bitboa comb_from_comp(const board *brd, bool to_play);
 
-// Compares two boards for equality.
-// only nonzero if all fields of the board struct are equal.
 bool board_cmp(const board *a, const board *b);
 bool move_cmp(const move *a, const move *b);
+// the following are internal functions, not to be used.
 piece get_piece(const board *brd, const bitboa position);
 void flip_piece(board *brd, const piece pc, const bool to_play,
                 const bitboa place);
@@ -119,3 +121,11 @@ bool try_promote(board *brd, const move *mov);
 void try_capture(board *brd, const move *mov);
 bool try_en_passant(board *brd, const move *mov);
 void make_move(board *brd, const move *mov);
+void try_undo_capture(board *brd, const move *mov);
+bool try_undo_castle(board *brd, const move *mov);
+bool try_undo_en_passant(board *brd, const move *mov);
+bool try_undo_promote(board *brd, const move *mov);
+void undo_move(board *brd, const move *mov);
+// the main functions for making (push) and undoing (pop) moves.
+void push_move(board *brd, vec_move *moves, const move *mov);
+void pop_move(board *brd, vec_move *moves);

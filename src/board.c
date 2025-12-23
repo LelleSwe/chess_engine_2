@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+DEFINE_VEC(move)
 
 inline board gen_start_board() {
    board board_ = {0x000000000000FF00UL,
@@ -59,7 +60,8 @@ inline bool board_cmp(const board *a, const board *b) {
 inline bool move_cmp(const move *a, const move *b) {
    return (a->to_play == b->to_play) && (a->capture == b->capture) &&
           (a->castle == b->castle) && (a->from == b->from) &&
-          (a->pc == b->pc) && (a->to == b->to);
+          (a->pc == b->pc) && (a->to == b->to) &&
+          (a->en_passant == b->en_passant);
 }
 
 inline bitboa brd_from_pos(const char *pos) {
@@ -142,14 +144,8 @@ void flip_piece(board *brd, const piece pc, const bool to_play,
 }
 
 inline void try_capture(board *brd, const move *mov) {
-   if (mov->to_play) {
-      if (brd->wcb_bb & mov->to) {
-         flip_piece(brd, mov->capture, false, mov->to);
-      }
-   } else {
-      if (brd->bcb_bb & mov->to) {
-         flip_piece(brd, mov->capture, true, mov->to);
-      }
+   if (mov->capture != NO_PIECE) {
+      flip_piece(brd, mov->capture, !(mov->to_play), mov->to);
    }
 }
 
@@ -324,10 +320,130 @@ piece get_piece(const board *brd, const bitboa position) {
    }
 
    // Something is wrong.
-   printf("ERROR: position: %llu has neither a piece nor no piece on it.",
+   printf("ERROR: position: %zu has neither a piece nor no piece on it.",
           position);
    exit(EXIT_FAILURE);
    return -1;
+}
+
+void try_undo_capture(board *brd, const move *mov) {
+   if (mov->capture != NO_PIECE) {
+      flip_piece(brd, mov->capture, !(mov->to_play), mov->to);
+   }
+}
+
+bool try_undo_castle(board *brd, const move *mov) {
+   if (mov->to_play) {
+      // short castle black
+      if (((mov->castle & SHORT_CASTLE) != 0) && (mov->pc == KING) &&
+          (mov->from == brd_from_pos("e8")) &&
+          (mov->to == brd_from_pos("g8"))) {
+         flip_piece(brd, KING, true, brd_from_pos("g8"));
+         flip_piece(brd, KING, true, brd_from_pos("e8"));
+         flip_piece(brd, ROOK, true, brd_from_pos("h8"));
+         flip_piece(brd, ROOK, true, brd_from_pos("f8"));
+         brd->black_castle = mov->castle;
+         // printf("varför gör du på detta viset svart kort %d %d %d\n",
+         //        mov->castle, brd->white_castle, brd->black_castle);
+         return true;
+      }
+      // long castle black
+      if (((mov->castle & LONG_CASTLE) != 0) && (mov->pc == KING) &&
+          (mov->from == brd_from_pos("e8")) &&
+          (mov->to == brd_from_pos("c8"))) {
+         flip_piece(brd, KING, true, brd_from_pos("e8"));
+         flip_piece(brd, KING, true, brd_from_pos("c8"));
+         flip_piece(brd, ROOK, true, brd_from_pos("a8"));
+         flip_piece(brd, ROOK, true, brd_from_pos("d8"));
+         brd->black_castle = mov->castle;
+         // printf("varför gör du på detta viset svart lång %d %d %d\n",
+         //        mov->castle, brd->white_castle, brd->black_castle);
+         return true;
+      }
+   } else {
+      // short castle white
+      if (((mov->castle & SHORT_CASTLE) != 0) && (mov->pc == KING) &&
+          (mov->from == brd_from_pos("e1")) &&
+          (mov->to == brd_from_pos("g1"))) {
+         flip_piece(brd, KING, false, brd_from_pos("g1"));
+         flip_piece(brd, KING, false, brd_from_pos("e1"));
+         flip_piece(brd, ROOK, false, brd_from_pos("h1"));
+         flip_piece(brd, ROOK, false, brd_from_pos("f1"));
+         brd->white_castle = mov->castle;
+         // printf("varför gör du på detta viset vit kort %d %d %d\n",
+         // mov->castle,
+         //        brd->white_castle, brd->black_castle);
+         return true;
+      }
+      // long castle white
+      if (((mov->castle & LONG_CASTLE) != 0) && (mov->pc == KING) &&
+          (mov->from == brd_from_pos("e1")) &&
+          (mov->to == brd_from_pos("c1"))) {
+         flip_piece(brd, KING, false, brd_from_pos("e1"));
+         flip_piece(brd, KING, false, brd_from_pos("c1"));
+         flip_piece(brd, ROOK, false, brd_from_pos("a1"));
+         flip_piece(brd, ROOK, false, brd_from_pos("d1"));
+         brd->white_castle = mov->castle;
+         // printf("varför gör du på detta viset vit lång %d %d %d\n",
+         // mov->castle,
+         //        brd->white_castle, brd->black_castle);
+         return true;
+      }
+   }
+   return false;
+}
+bool try_undo_en_passant(board *brd, const move *mov) {
+   if (mov->prev_en_passant) {
+      if ((mov->pc == PAWN) &&
+          ((__builtin_clzll(mov->from) % 8) !=
+           (__builtin_clzll(mov->to) % 8)) &&
+          (mov->capture == NO_PIECE)) {
+         flip_piece(brd, PAWN, !(mov->to_play), mov->prev_en_passant);
+         flip_piece(brd, PAWN, mov->to_play, mov->from);
+         flip_piece(brd, PAWN, mov->to_play, mov->to);
+         return true;
+      }
+   }
+   return false;
+}
+
+bool try_undo_promote(board *brd, const move *mov) {
+   if (mov->promotion != NO_PIECE) {
+      flip_piece(brd, PAWN, mov->to_play, mov->from);
+      flip_piece(brd, mov->promotion, mov->to_play, mov->to);
+      try_undo_capture(brd, mov);
+      return true;
+   }
+   return false;
+}
+void undo_move(board *brd, const move *mov) {
+   brd->enp = mov->prev_en_passant;
+   if (try_undo_castle(brd, mov))
+      return;
+   if (try_undo_promote(brd, mov))
+      return;
+   if (try_undo_en_passant(brd, mov))
+      return;
+
+   // move piece
+   flip_piece(brd, mov->pc, mov->to_play, mov->from);
+   flip_piece(brd, mov->pc, mov->to_play, mov->to);
+   try_undo_capture(brd, mov);
+
+   // castling rights
+   if (mov->to_play) {
+      brd->black_castle = mov->castle;
+      brd->white_castle = mov->castle;
+   }
+}
+
+void push_move(board *brd, vec_move *moves, const move *mov) {
+   vec_push_move(moves, *mov);
+   make_move(brd, mov);
+}
+void pop_move(board *brd, vec_move *moves) {
+   move mov = vec_pop_move(moves);
+   undo_move(brd, &mov);
 }
 
 void from_long_alg_single(move *to_move, const board *_board,
@@ -380,10 +496,8 @@ void from_long_alg_single(move *to_move, const board *_board,
    to_move->to_play = to_play;
    to_move->castle = to_play ? _board->black_castle : _board->white_castle;
    to_move->promotion = promotion;
+   to_move->prev_en_passant = _board->enp;
 
-   // TODO: placeholders!
-   // if e1c1 king, then castle_long
-   // if e1g1 king, then castle_short
    to_move->en_passant = 0;
    if (mov_pc == PAWN) {
       if ((trank - frank == (bitboa)(-2)) || (trank - frank == 2)) {
@@ -392,32 +506,36 @@ void from_long_alg_single(move *to_move, const board *_board,
    }
 }
 
-#include "debug_io.h"
+// #include "debug_io.h"
 
-void from_long_algebraic(char *alg_string, board *_board) {
+void from_long_algebraic(const char *alg_string, board *_board,
+                         vec_move *moves) {
    *_board = gen_start_board();
 
    bool to_play = false;
    int idx = 0;
    int len = strlen(alg_string);
-   char alg_move[6] = "";
    while (idx < len) {
+      char alg_move[6] = "";
       move to_make;
       alg_move[0] = alg_string[idx];
       alg_move[1] = alg_string[idx + 1];
 
       alg_move[2] = alg_string[idx + 2];
       alg_move[3] = alg_string[idx + 3];
-      if (isspace(alg_string[idx + 4])) {
+      if (!isspace(alg_string[idx + 4])) {
          alg_move[4] = alg_string[idx + 4];
          idx++;
       }
-      printf("%s\n", alg_move);
-      idx += 4;
+      // printf("\"%s\"\n", alg_move);
+      idx += 5;
       from_long_alg_single(&to_make, _board, alg_move, to_play);
       to_play = !to_play;
 
-      print_move(&to_make);
-      make_move(_board, &to_make);
+      // print_move(&to_make);
+      // printf("%d ", get_piece(_board, to_make.from));
+      push_move(_board, moves, &to_make);
+      // printf("%d\n", get_piece(_board, to_make.to));
+      // print_board(_board);
    }
 }

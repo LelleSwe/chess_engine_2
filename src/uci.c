@@ -1,5 +1,6 @@
 #include "board.h"
 #include "debug_io.h"
+#include "uci.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <string.h>
@@ -7,13 +8,14 @@
 static int search = 0;
 static int is_ready = 1;
 
-void uci(board *_board) {
-   char buffer[0x100] = "";
+void uci(board *brd, vec_move *moves) {
+   char buffer[0x1000] = "";
    while (1) {
       fgets(buffer, sizeof(buffer), stdin);
       if (strcmp(buffer, "") == 0) {
          continue;
       }
+      // fprintf(stderr, "%s", buffer);
 
       int len = strlen(buffer);
       while (isspace(buffer[len - 1]) && len) {
@@ -28,9 +30,9 @@ void uci(board *_board) {
       }
 
       if (strcmp(buffer, "isready") == 0) {
-         while (is_ready == 0) {
-            sleep(1);
-         }
+         // while (is_ready == 0) {
+         //    sleep(1);
+         // }
          printf("readyok\n");
       }
 
@@ -39,16 +41,18 @@ void uci(board *_board) {
       }
 
       if (strcmp(buffer, "ucinewgame") == 0) {
-         memcpy(_board, &default_start_board, sizeof(board));
+         memcpy(brd, &default_start_board, sizeof(board));
          printf("readyok\n");
       }
 
       if (strcmp(buffer, "print_internal") == 0) {
-         print_board(_board);
+         print_board(brd);
       }
 
       if (strncmp(buffer, "position", strlen("position")) == 0) {
-         from_long_algebraic(buffer + strlen("position \0"), _board);
+         from_long_algebraic(buffer + strlen("position \0"), brd, moves);
+         fprintf(stderr, "%s\n", buffer);
+         printf("readyok\n");
       }
 
       fflush(stdout);
@@ -57,6 +61,7 @@ void uci(board *_board) {
 }
 
 void *start_uci(void *argp) {
-   uci((board *)argp);
+   pthargs *args = (pthargs *)argp;
+   uci(args->brd, args->moves);
    return 0;
 }

@@ -16,7 +16,7 @@ void print_board_str(char *str) {
 }
 
 /// Doesn't work. Idk why.
-void print_board(board *_board) {
+void print_board(const board *_board) {
    char out[65];
    out[64] = '\0';
 
@@ -82,7 +82,7 @@ void repeat(char *str, int len, char to) {
    }
 }
 
-void print_move(move *_move) {
+void print_move(const move *_move) {
    char pc;
 
    switch (_move->pc) {
@@ -126,4 +126,23 @@ void print_move(move *_move) {
 
    printf("Moving to:");
    print_board_str(to_str);
+}
+
+void print_board_internal(const board *brd) {
+   printf("wpa_bb: %lu \nwbi_bb: %lu \nwro_bb: %lu \nwqu_bb: %lu \nwki_bb: %lu "
+          "\nwkn_bb: %lu \nwcb_bb: %lu \nbpa_bb: %lu \nbbi_bb: %lu \nbro_bb: "
+          "%lu \nbqu_bb: %lu \nbki_bb: %lu "
+          "\nbkn_bb: %lu \nbcb_bb: %lu \nwhite_castle: %d \nblack_castle: %d "
+          "\nenp: %lu\n\n",
+          brd->wpa_bb, brd->wbi_bb, brd->wro_bb, brd->wqu_bb, brd->wki_bb,
+          brd->wkn_bb, brd->wcb_bb, brd->bpa_bb, brd->bbi_bb, brd->bro_bb,
+          brd->bqu_bb, brd->bki_bb, brd->bkn_bb, brd->bcb_bb, brd->white_castle,
+          brd->black_castle, brd->enp);
+}
+void print_mov_internal(const move *mov) {
+   printf("from: %lu \nto: %lu \npc: %d \ncapture: %d \npromotion: %d "
+          "\ncastle: %d \nto_play: %d \nen_passant: %lu "
+          "\nprev_en_passant: %lu\n\n",
+          mov->from, mov->to, mov->pc, mov->capture, mov->promotion,
+          mov->castle, mov->to_play, mov->en_passant, mov->prev_en_passant);
 }
