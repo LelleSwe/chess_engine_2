@@ -37,8 +37,8 @@ typedef enum {
 // black king bitboard.
 // black knight bitboard.
 // Combined bitboard of all black pieces
-// The bitboards have the highest set bit in the top left,
-// and lowest set in bottom right, traversing horisontally.
+// The bitboards follow little endian ordering,
+// with a1=1, a8=0x100000000000000, h8=0x8000000000000000
 typedef struct {
    bitboa wpa_bb;
    bitboa wbi_bb;

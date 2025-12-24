@@ -1,18 +1,16 @@
 #include "board.h"
 #include <stdio.h>
 
-void meh() { printf("w"); }
-
 void print_board_str(char *str) {
    for (int i = 0; i < 64; i++) {
       if ((i % 8) == 0) {
-         printf("\n%d ", (i + 1) / 8);
+         printf("\n%d  ", 8 - (i + 1) / 8);
       }
 
       char what = str[i];
       printf("%c", what);
    }
-   puts("\n");
+   puts("\n\n   ABCDEFGH\n");
 }
 
 /// Doesn't work. Idk why.
@@ -20,40 +18,44 @@ void print_board(const board *_board) {
    char out[65];
    out[64] = '\0';
 
-   for (int i = 0; i < 64; i++) {
-      if (_board->wpa_bb & (bitboa)1 << i) {
-         out[63 - i] = 'P';
-         // printf("P, %d", i);
-      } else if (_board->wbi_bb & (bitboa)1 << i) {
-         out[63 - i] = 'B';
-         // printf("B");
-      } else if (_board->wro_bb & (bitboa)1 << i) {
-         out[63 - i] = 'R';
-         // printf("R");
-      } else if (_board->wqu_bb & (bitboa)1 << i) {
-         out[63 - i] = 'Q';
-         // printf("Q");
-      } else if (_board->wki_bb & (bitboa)1 << i) {
-         out[63 - i] = 'K';
-         // printf("K");
-      } else if (_board->wkn_bb & (bitboa)1 << i) {
-         out[63 - i] = 'N';
-         // printf("N");
-      } else if (_board->bpa_bb & (bitboa)1 << i) {
-         out[63 - i] = 'p';
-      } else if (_board->bbi_bb & (bitboa)1 << i) {
-         out[63 - i] = 'b';
-      } else if (_board->bro_bb & (bitboa)1 << i) {
-         out[63 - i] = 'r';
-      } else if (_board->bqu_bb & (bitboa)1 << i) {
-         out[63 - i] = 'q';
-      } else if (_board->bki_bb & (bitboa)1 << i) {
-         out[63 - i] = 'k';
-      } else if (_board->bkn_bb & (bitboa)1 << i) {
-         out[63 - i] = 'n';
-      } else {
-         out[63 - i] = '.';
-         // printf(".");
+   for (int row = 7; row >= 0; row--) {
+      for (int col = 0; col < 8; col++) {
+         int mask_offset = 8 * row + col;
+         int assign_offset = 8 * (7 - row) + col;
+         if (_board->wpa_bb & (bitboa)1 << mask_offset) {
+            out[assign_offset] = 'P';
+            // printf("P, %d", i);
+         } else if (_board->wbi_bb & (bitboa)1 << mask_offset) {
+            out[assign_offset] = 'B';
+            // printf("B");
+         } else if (_board->wro_bb & (bitboa)1 << mask_offset) {
+            out[assign_offset] = 'R';
+            // printf("R");
+         } else if (_board->wqu_bb & (bitboa)1 << mask_offset) {
+            out[assign_offset] = 'Q';
+            // printf("Q");
+         } else if (_board->wki_bb & (bitboa)1 << mask_offset) {
+            out[assign_offset] = 'K';
+            // printf("K");
+         } else if (_board->wkn_bb & (bitboa)1 << mask_offset) {
+            out[assign_offset] = 'N';
+            // printf("N");
+         } else if (_board->bpa_bb & (bitboa)1 << mask_offset) {
+            out[assign_offset] = 'p';
+         } else if (_board->bbi_bb & (bitboa)1 << mask_offset) {
+            out[assign_offset] = 'b';
+         } else if (_board->bro_bb & (bitboa)1 << mask_offset) {
+            out[assign_offset] = 'r';
+         } else if (_board->bqu_bb & (bitboa)1 << mask_offset) {
+            out[assign_offset] = 'q';
+         } else if (_board->bki_bb & (bitboa)1 << mask_offset) {
+            out[assign_offset] = 'k';
+         } else if (_board->bkn_bb & (bitboa)1 << mask_offset) {
+            out[assign_offset] = 'n';
+         } else {
+            out[assign_offset] = '.';
+            // printf(".");
+         }
       }
    }
 
@@ -115,11 +117,19 @@ void print_move(const move *_move) {
 
    char from_str[65];
    repeat(from_str, 64, '.');
-   from_str[__builtin_clzl(_move->from)] = pc;
-
    char to_str[65];
    repeat(to_str, 64, '.');
-   to_str[__builtin_clzl(_move->to)] = pc;
+
+   for (int row = 0; row < 8; row++) {
+      for (int col = 0; col < 8; col++) {
+         int mask_offset = 8 * row + col;
+         int assign_offset = 8 * (7 - row) + col;
+         if ((1UL << (mask_offset)) & _move->from)
+            from_str[assign_offset] = pc;
+         if ((1UL << (mask_offset)) & _move->to)
+            to_str[assign_offset] = pc;
+      }
+   }
 
    printf("Moving from:");
    print_board_str(from_str);

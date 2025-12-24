@@ -10,11 +10,11 @@ void test_set_up_board() {
 
 void test_get_piece_start_board() {
    board brd = gen_start_board();
-   piece pc1 = get_piece(&brd, 0x8000);
+   piece pc1 = get_piece(&brd, brd_from_pos("d2"));
    TEST_ASSERT_EQUAL_INT(PAWN, pc1);
-   piece pc2 = get_piece(&brd, 0x8000000);
+   piece pc2 = get_piece(&brd, brd_from_pos("h6"));
    TEST_ASSERT_EQUAL_INT(NO_PIECE, pc2);
-   piece pc3 = get_piece(&brd, 0x800000000000000);
+   piece pc3 = get_piece(&brd, brd_from_pos("e8"));
    TEST_ASSERT_EQUAL_INT(KING, pc3);
 }
 
@@ -22,8 +22,8 @@ void test_get_move_from_single_string() {
    board brd = gen_start_board();
    move mov = {};
    from_long_alg_single(&mov, &brd, "e2e4", false);
-   move expected1 = {.from = 0x800UL,
-                     .to = 0x8000000UL,
+   move expected1 = {.from = brd_from_pos("e2"),
+                     .to = brd_from_pos("e4"),
                      .pc = PAWN,
                      .capture = NO_PIECE,
                      .promotion = NO_PIECE,
@@ -41,23 +41,25 @@ void test_flip_piece() {
 
    flip_piece(&brd, BISHOP, true, brd_from_pos("c8"));
    flip_piece(&brd, BISHOP, true, brd_from_pos("h5"));
-   const board expect = {0x000000000000FF00UL,
-                         0x0000000000000024UL,
-                         0x0000000000000081UL,
-                         0x0000000000000010UL,
-                         0x0000000080000000UL,
-                         0x0000000000000042UL,
-                         0x000000008000FFF7UL,
-                         0x00FF000000000000UL,
-                         0x0400000100000000UL,
-                         0x8100000000000000UL,
-                         0x1000000000000000UL,
-                         0x0800000000000000UL,
-                         0x4200000000000000UL,
-                         0xDFFF000100000000UL,
-                         3,
-                         3,
-                         0};
+   board expect = {0x000000000000FF00UL,
+                   0x0000000000000024UL,
+                   0x0000000000000081UL,
+                   0x0000000000000008UL,
+                   0x0000000001000000UL,
+                   0x0000000000000042UL,
+                   0x000000000100FFF7UL,
+                   0x00FF000000000000UL,
+                   0x2000008000000000UL,
+                   0x8100000000000000UL,
+                   0x0800000000000000UL,
+                   0x1000000000000000UL,
+                   0x4200000000000000UL,
+                   0xDFFF008000000000UL,
+                   3,
+                   3,
+                   0};
+   expect.bcb_bb = comb_from_comp(&expect, true);
+   expect.wcb_bb = comb_from_comp(&expect, false);
    TEST_ASSERT(board_cmp(&brd, &expect));
 }
 

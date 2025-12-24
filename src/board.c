@@ -7,43 +7,43 @@
 DEFINE_VEC(move)
 
 inline board gen_start_board() {
-   board board_ = {0x000000000000FF00UL,
-                   0x0000000000000024UL,
-                   0x0000000000000081UL,
-                   0x0000000000000010UL,
-                   0x0000000000000008UL,
-                   0x0000000000000042UL,
-                   0x000000000000FFFFUL,
-                   0x00FF000000000000UL,
-                   0x2400000000000000UL,
-                   0x8100000000000000UL,
-                   0x1000000000000000UL,
-                   0x0800000000000000UL,
-                   0x4200000000000000UL,
-                   0xFFFF000000000000UL,
-                   3,
-                   3,
-                   0};
+   board board_ = {.wpa_bb = 0x000000000000FF00UL,
+                   .wbi_bb = 0x0000000000000024UL,
+                   .wro_bb = 0x0000000000000081UL,
+                   .wqu_bb = 0x0000000000000008UL,
+                   .wki_bb = 0x0000000000000010UL,
+                   .wkn_bb = 0x0000000000000042UL,
+                   .wcb_bb = 0x000000000000FFFFUL,
+                   .bpa_bb = 0x00FF000000000000UL,
+                   .bbi_bb = 0x2400000000000000UL,
+                   .bro_bb = 0x8100000000000000UL,
+                   .bqu_bb = 0x0800000000000000UL,
+                   .bki_bb = 0x1000000000000000UL,
+                   .bkn_bb = 0x4200000000000000UL,
+                   .bcb_bb = 0xFFFF000000000000UL,
+                   .white_castle = 3,
+                   .black_castle = 3,
+                   .enp = 0};
    return board_;
 }
 
-const board default_start_board = {0x000000000000FF00UL,
-                                   0x0000000000000024UL,
-                                   0x0000000000000081UL,
-                                   0x0000000000000010UL,
-                                   0x0000000000000008UL,
-                                   0x0000000000000042UL,
-                                   0x000000000000FFFFUL,
-                                   0x00FF000000000000UL,
-                                   0x2400000000000000UL,
-                                   0x8100000000000000UL,
-                                   0x1000000000000000UL,
-                                   0x0800000000000000UL,
-                                   0x4200000000000000UL,
-                                   0xFFFF000000000000UL,
-                                   3,
-                                   3,
-                                   0};
+const board default_start_board = {.wpa_bb = 0x000000000000FF00UL,
+                                   .wbi_bb = 0x0000000000000024UL,
+                                   .wro_bb = 0x0000000000000081UL,
+                                   .wqu_bb = 0x0000000000000008UL,
+                                   .wki_bb = 0x0000000000000010UL,
+                                   .wkn_bb = 0x0000000000000042UL,
+                                   .wcb_bb = 0x000000000000FFFFUL,
+                                   .bpa_bb = 0x00FF000000000000UL,
+                                   .bbi_bb = 0x2400000000000000UL,
+                                   .bro_bb = 0x8100000000000000UL,
+                                   .bqu_bb = 0x0800000000000000UL,
+                                   .bki_bb = 0x1000000000000000UL,
+                                   .bkn_bb = 0x4200000000000000UL,
+                                   .bcb_bb = 0xFFFF000000000000UL,
+                                   .white_castle = 3,
+                                   .black_castle = 3,
+                                   .enp = 0};
 
 inline bool board_cmp(const board *a, const board *b) {
    return (a->wpa_bb == b->wpa_bb) && (a->wbi_bb == b->wbi_bb) &&
@@ -67,7 +67,7 @@ inline bool move_cmp(const move *a, const move *b) {
 inline bitboa brd_from_pos(const char *pos) {
    int ffile = pos[0] - 'a';
    int frank = pos[1] - '1';
-   bitboa brd = (1UL << (7UL - ffile)) * (1UL << (frank * 8UL));
+   bitboa brd = (1UL << ffile) * (1UL << (frank * 8UL));
    return brd;
 }
 
@@ -262,21 +262,21 @@ void make_move(board *brd, const move *mov) {
       if (mov->to_play == false) {
          if ((brd->white_castle & SHORT_CASTLE) &&
              ((mov->from | mov->to) & brd->wro_bb) &&
-             ((mov->from & brd->wro_bb) == 1)) {
+             ((mov->from & brd->wro_bb) == brd_from_pos("a8"))) {
             brd->white_castle ^= SHORT_CASTLE;
          } else if ((brd->white_castle & LONG_CASTLE) &&
                     ((mov->from | mov->to) & brd->wro_bb) &&
-                    ((mov->from & brd->wro_bb) == 0x80)) {
+                    ((mov->from & brd->wro_bb) == brd_from_pos("a1"))) {
             brd->white_castle ^= LONG_CASTLE;
          }
       } else {
          if ((brd->black_castle & SHORT_CASTLE) &&
              ((mov->from | mov->to) & brd->bro_bb) &&
-             ((mov->from & brd->bro_bb) == 0x100000000000000)) {
+             ((mov->from & brd->bro_bb) == brd_from_pos("h8"))) {
             brd->black_castle ^= SHORT_CASTLE;
          } else if ((brd->black_castle & LONG_CASTLE) &&
                     ((mov->from | mov->to) & brd->bro_bb) &&
-                    ((mov->from & brd->bro_bb) == 0x8000000000000000)) {
+                    ((mov->from & brd->bro_bb) == brd_from_pos("a8"))) {
             brd->black_castle ^= LONG_CASTLE;
          }
       }
@@ -450,11 +450,11 @@ void from_long_alg_single(move *to_move, const board *_board,
                           const char *single_fen, const bool to_play) {
    bitboa ffile = single_fen[0] - 'a';
    bitboa frank = single_fen[1] - '1';
-   bitboa from_board = (1ULL << (7ULL - ffile)) * (1ULL << (frank * 8ULL));
+   bitboa from_board = (1ULL << ffile) * (1ULL << (frank * 8ULL));
 
    bitboa tfile = single_fen[2] - 'a';
    bitboa trank = single_fen[3] - '1';
-   bitboa to_board = (1ULL << (7ULL - tfile)) * (1ULL << (trank * 8ULL));
+   bitboa to_board = (1ULL << tfile) * (1ULL << (trank * 8ULL));
    piece promotion;
    if (!isspace(single_fen[4])) {
       switch (single_fen[4]) {
