@@ -84,36 +84,11 @@ void repeat(char *str, int len, char to) {
    }
 }
 
-void print_move(const move *_move) {
-   char pc;
-
-   switch (_move->pc) {
-   case PAWN:
-      pc = 'p';
-      break;
-   case BISHOP:
-      pc = 'b';
-      break;
-   case ROOK:
-      pc = 'r';
-      break;
-   case QUEEN:
-      pc = 'q';
-      break;
-   case KING:
-      pc = 'k';
-      break;
-   case KNIGHT:
-      pc = 'n';
-      break;
-   default:
-      pc = '.';
-      break;
-   }
-
-   if (!_move->to_play && pc != '.') {
-      pc -= 32;
-   }
+void print_move(const move mov) {
+   char pc = 'P';
+   bitboa from = from_move(mov);
+   bitboa to = to_move(mov);
+   piece promote = promotion_move(mov);
 
    char from_str[65];
    repeat(from_str, 64, '.');
@@ -124,9 +99,9 @@ void print_move(const move *_move) {
       for (int col = 0; col < 8; col++) {
          int mask_offset = 8 * row + col;
          int assign_offset = 8 * (7 - row) + col;
-         if ((1UL << (mask_offset)) & _move->from)
+         if ((1UL << (mask_offset)) & from)
             from_str[assign_offset] = pc;
-         if ((1UL << (mask_offset)) & _move->to)
+         if ((1UL << (mask_offset)) & to)
             to_str[assign_offset] = pc;
       }
    }
@@ -136,23 +111,20 @@ void print_move(const move *_move) {
 
    printf("Moving to:");
    print_board_str(to_str);
+
+   printf("Promotion? %d\n", promote);
 }
 
 void print_board_internal(const board *brd) {
    printf("wpa_bb: %lu \nwbi_bb: %lu \nwro_bb: %lu \nwqu_bb: %lu \nwki_bb: %lu "
           "\nwkn_bb: %lu \nwcb_bb: %lu \nbpa_bb: %lu \nbbi_bb: %lu \nbro_bb: "
           "%lu \nbqu_bb: %lu \nbki_bb: %lu "
-          "\nbkn_bb: %lu \nbcb_bb: %lu \nwhite_castle: %d \nblack_castle: %d "
-          "\nenp: %lu\n\n",
+          "\nbkn_bb: %lu \nbcb_bb: %lu \nwhite_castle: %zu \nblack_castle: %zu "
+          "\nenp: %lu \nmoves: %lu \ncaptures: %lu \n\n",
           brd->wpa_bb, brd->wbi_bb, brd->wro_bb, brd->wqu_bb, brd->wki_bb,
           brd->wkn_bb, brd->wcb_bb, brd->bpa_bb, brd->bbi_bb, brd->bro_bb,
-          brd->bqu_bb, brd->bki_bb, brd->bkn_bb, brd->bcb_bb, brd->white_castle,
-          brd->black_castle, brd->enp);
-}
-void print_mov_internal(const move *mov) {
-   printf("from: %lu \nto: %lu \npc: %d \ncapture: %d \npromotion: %d "
-          "\ncastle: %d \nto_play: %d \nen_passant: %lu "
-          "\nprev_en_passant: %lu\n\n",
-          mov->from, mov->to, mov->pc, mov->capture, mov->promotion,
-          mov->castle, mov->to_play, mov->en_passant, mov->prev_en_passant);
+          brd->bqu_bb, brd->bki_bb, brd->bkn_bb, brd->bcb_bb,
+          brd->white_castle_history.size, brd->black_castle_history.size,
+          brd->enp_history.size, brd->move_history.size,
+          brd->capture_history.size);
 }

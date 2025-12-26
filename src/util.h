@@ -2,91 +2,97 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#ifndef vector_def
-#define vector_def
+#ifndef arrvec_def
+#define arrvec_def
+#define arr_unsafe_ops false
 
-#define DECLARE_VEC(type)                                                      \
+#define DECLARE_ARR(type, max)                                                 \
    typedef struct {                                                            \
-      type *ptr;                                                               \
-      size_t capacity;                                                         \
+      type data[max];                                                          \
       size_t size;                                                             \
-   } vec_##type;                                                               \
+   } arr_##type##max;                                                          \
                                                                                \
-   vec_##type new_vec_##type(const size_t capacity);                           \
-   void vec_push_##type(vec_##type *vec, const type elem);                     \
-   type vec_pop_##type(vec_##type *vec);                                       \
-   type *vec_last_##type(vec_##type *vec);                                     \
-   type vec_get_##type(vec_##type *vec, const size_t idx);                     \
-   void vec_set_##type(vec_##type *vec, const size_t idx, const type elem);
+   arr_##type##max new_arr_##type##max();                                      \
+   void arr_push_##type##max(arr_##type##max *arr, const type elem);           \
+   type arr_pop_##type##max(arr_##type##max *arr);                             \
+   void arr_drop_##type##max(arr_##type##max *arr);                            \
+   type *arr_last_##type##max(arr_##type##max *arr);                           \
+   type arr_get_##type##max(arr_##type##max *arr, const size_t idx);           \
+   void arr_set_##type##max(arr_##type##max *arr, const size_t idx,            \
+                            const type elem);
 
-#define DEFINE_VEC(type)                                                       \
-   vec_##type new_vec_##type(const size_t capacity) {                          \
-      type *ptr = malloc(sizeof(type) * capacity);                             \
-      if (ptr == NULL) {                                                       \
-         printf("ERROR: malloc returned null pointer in file %s at line "      \
-                "%d.\n",                                                       \
-                __FILE__, __LINE__);                                           \
-         exit(EXIT_FAILURE);                                                   \
-      }                                                                        \
-      vec_##type vec = {ptr, capacity, 0};                                     \
-      return vec;                                                              \
+#define DEFINE_ARR(type, max)                                                  \
+   inline arr_##type##max new_arr_##type##max() {                              \
+      type data[max];                                                          \
+      arr_##type##max arr = {{*data}, 0};                                      \
+      return arr;                                                              \
    }                                                                           \
                                                                                \
-   void vec_push_##type(vec_##type *vec, const type elem) {                    \
-      if (vec->size >= vec->capacity) {                                        \
-         printf("ERROR: vector of type %s with capacity %zu and max size "     \
+   inline void arr_push_##type##max(arr_##type##max *arr, const type elem) {   \
+      if (!arr_unsafe_ops && (arr->size >= max)) {                             \
+         printf("ERROR: array of type %s with capacity %zu and max size "      \
                 "tried to push element. File %s and line %d.\n",               \
-                #type, vec->capacity, __FILE__, __LINE__);                     \
+                #type, (size_t)max, __FILE__, __LINE__);                       \
          exit(EXIT_FAILURE);                                                   \
       }                                                                        \
-      (vec->ptr)[vec->size] = elem;                                            \
-      (vec->size)++;                                                           \
+      (arr->data)[arr->size] = elem;                                           \
+      (arr->size)++;                                                           \
    }                                                                           \
                                                                                \
-   type vec_pop_##type(vec_##type *vec) {                                      \
-      if (vec->size == 0) {                                                    \
+   inline type arr_pop_##type##max(arr_##type##max *arr) {                     \
+      if (!arr_unsafe_ops && (arr->size == 0)) {                               \
+         printf("ERROR: array of type %s with capacity %zu tried to pop when " \
+                "empty! File %s and line %d.\n",                               \
+                #type, (size_t)max, __FILE__, __LINE__);                       \
+         exit(EXIT_FAILURE);                                                   \
+      }                                                                        \
+      type elem = (arr->data)[arr->size - 1];                                  \
+      (arr->size)--;                                                           \
+      return elem;                                                             \
+   }                                                                           \
+                                                                               \
+   inline void arr_drop_##type##max(arr_##type##max *arr) {                    \
+      if (!arr_unsafe_ops && (arr->size == 0)) {                               \
          printf(                                                               \
-             "ERROR: vector of type %s with capacity %zu tried to pop when "   \
+             "ERROR: array of type %s with capacity %zu tried to drop when "   \
              "empty! File %s and line %d.\n",                                  \
-             #type, vec->capacity, __FILE__, __LINE__);                        \
+             #type, (size_t)max, __FILE__, __LINE__);                          \
          exit(EXIT_FAILURE);                                                   \
       }                                                                        \
-      type elem = (vec->ptr)[vec->size - 1];                                   \
-      (vec->ptr)[vec->size - 1] = (type){};                                    \
-      (vec->size)--;                                                           \
-      return elem;                                                             \
+      (arr->size)--;                                                           \
    }                                                                           \
                                                                                \
-   type *vec_last_##type(vec_##type *vec) {                                    \
-      if (vec->size == 0) {                                                    \
-         printf("ERROR: vector of type %s with capacity %zu tried to pop"      \
+   inline type *arr_last_##type##max(arr_##type##max *arr) {                   \
+      if (!arr_unsafe_ops && (arr->size == 0)) {                               \
+         printf("ERROR: array of type %s with capacity %zu tried to peek last" \
                 "when empty! File %s and line %d.\n",                          \
-                #type, vec->capacity, __FILE__, __LINE__);                     \
+                #type, (size_t)max, __FILE__, __LINE__);                       \
          exit(EXIT_FAILURE);                                                   \
       }                                                                        \
-      type *elem = &((vec->ptr)[vec->size - 1]);                               \
+      type *elem = &((arr->data)[arr->size - 1]);                              \
       return elem;                                                             \
    }                                                                           \
                                                                                \
-   type vec_get_##type(vec_##type *vec, const size_t idx) {                    \
-      if (idx >= (vec->size)) {                                                \
-         printf("ERROR: vector of type %s with size %zu tried to get at "      \
+   inline type arr_get_##type##max(arr_##type##max *arr, const size_t idx) {   \
+      if (!arr_unsafe_ops && (idx >= (arr->size))) {                           \
+         printf("ERROR: array of type %s with size %zu tried to get at "       \
                 "index %zu. File %s and line %d.\n",                           \
-                #type, vec->size, idx, __FILE__, __LINE__);                    \
+                #type, arr->size, idx, __FILE__, __LINE__);                    \
          exit(EXIT_FAILURE);                                                   \
       }                                                                        \
-      type elem = (vec->ptr)[idx];                                             \
+      type elem = (arr->data)[idx];                                            \
       return elem;                                                             \
    }                                                                           \
                                                                                \
-   void vec_set_##type(vec_##type *vec, const size_t idx, const type elem) {   \
-      if (idx >= (vec->size)) {                                                \
-         printf("ERROR: vector of type %s with size %zu tried to set at "      \
+   inline void arr_set_##type##max(arr_##type##max *arr, const size_t idx,     \
+                                   const type elem) {                          \
+      if (!arr_unsafe_ops && (idx >= (arr->size))) {                           \
+         printf("ERROR: array of type %s with size %zu tried to set at "       \
                 "index %zu. File %s and line %d.\n",                           \
-                #type, vec->size, idx, __FILE__, __LINE__);                    \
+                #type, arr->size, idx, __FILE__, __LINE__);                    \
          exit(EXIT_FAILURE);                                                   \
       }                                                                        \
-      (vec->ptr)[idx] = elem;                                                  \
+      (arr->data)[idx] = elem;                                                 \
    }
 
 #endif

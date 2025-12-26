@@ -8,7 +8,7 @@
 static int search = 0;
 static int is_ready = 1;
 
-void uci(board *brd, vec_move *moves) {
+void uci(board *brd) {
    char buffer[0x1000] = "";
    while (1) {
       fgets(buffer, sizeof(buffer), stdin);
@@ -41,7 +41,6 @@ void uci(board *brd, vec_move *moves) {
       }
 
       if (strcmp(buffer, "ucinewgame") == 0) {
-         memcpy(brd, &default_start_board, sizeof(board));
          printf("readyok\n");
       }
 
@@ -50,7 +49,7 @@ void uci(board *brd, vec_move *moves) {
       }
 
       if (strncmp(buffer, "position", strlen("position")) == 0) {
-         from_long_algebraic(buffer + strlen("position \0"), brd, moves);
+         from_long_algebraic(buffer + strlen("position \0"), brd);
          fprintf(stderr, "%s\n", buffer);
          printf("readyok\n");
       }
@@ -61,7 +60,6 @@ void uci(board *brd, vec_move *moves) {
 }
 
 void *start_uci(void *argp) {
-   pthargs *args = (pthargs *)argp;
-   uci(args->brd, args->moves);
+   uci((board *)argp);
    return 0;
 }

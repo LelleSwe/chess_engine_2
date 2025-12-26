@@ -35,6 +35,8 @@ while True:
     print("1 for int_to_pos")
     print("2 for pos_to_int")
     print("3 for multi_pos_to_int")
+    print("4 for pos_to_square")
+    print("5 for int_to_square (not implemented?)")
     x = int(input("> "))
 
     if x == 1:
@@ -50,3 +52,7 @@ while True:
         print("input multiple locations, formatted like [\"e2e4\", \"b1b7\"]")
         loc = eval(input("> "))
         print(multi_pos_to_int(loc))
+    if x == 4:
+        print("input square, (e.g. e4")
+        loc = input("> ")
+        print(square_to_int())

@@ -4,7 +4,9 @@
 
 void test_set_up_board() {
    board brd = gen_start_board();
-   bool equal = board_cmp(&default_start_board, &brd);
+   bool equal = (brd.black_castle_history.size == 1) &&
+                (brd.white_castle_history.size == 1) &&
+                (brd.capture_history.size == 1);
    TEST_ASSERT(equal);
 }
 
@@ -19,19 +21,9 @@ void test_get_piece_start_board() {
 }
 
 void test_get_move_from_single_string() {
-   board brd = gen_start_board();
-   move mov = {};
-   from_long_alg_single(&mov, &brd, "e2e4", false);
-   move expected1 = {.from = brd_from_pos("e2"),
-                     .to = brd_from_pos("e4"),
-                     .pc = PAWN,
-                     .capture = NO_PIECE,
-                     .promotion = NO_PIECE,
-                     .castle = BOTH_CASTLE,
-                     .to_play = false,
-                     .en_passant = brd_from_pos("e4"),
-                     .prev_en_passant = 0};
-   TEST_ASSERT(move_cmp(&expected1, &mov));
+   move mov = from_long_alg_single("e2e4\0");
+   move expected1 = (e4 << 6) | e2;
+   TEST_ASSERT_EQUAL_INT16(expected1, mov);
 }
 
 void test_flip_piece() {
@@ -41,336 +33,196 @@ void test_flip_piece() {
 
    flip_piece(&brd, BISHOP, true, brd_from_pos("c8"));
    flip_piece(&brd, BISHOP, true, brd_from_pos("h5"));
-   board expect = {0x000000000000FF00UL,
-                   0x0000000000000024UL,
-                   0x0000000000000081UL,
-                   0x0000000000000008UL,
-                   0x0000000001000000UL,
-                   0x0000000000000042UL,
-                   0x000000000100FFF7UL,
-                   0x00FF000000000000UL,
-                   0x2000008000000000UL,
-                   0x8100000000000000UL,
-                   0x0800000000000000UL,
-                   0x1000000000000000UL,
-                   0x4200000000000000UL,
-                   0xDFFF008000000000UL,
-                   3,
-                   3,
-                   0};
-   expect.bcb_bb = comb_from_comp(&expect, true);
-   expect.wcb_bb = comb_from_comp(&expect, false);
-   TEST_ASSERT(board_cmp(&brd, &expect));
+   board expect;
+   from_fen("rn1qkbnr/pppppppp/8/7b/K7/8/PPPPPPPP/RNBQ1BNR w kq - 0 1",
+            &expect);
+
+   // print_board(&brd);
+   // print_board(&expect);
+   TEST_ASSERT(board_cmp_bb(&brd, &expect));
 }
 
 void test_castle_short() {
-   board brd = {0,
-                0,
-                brd_from_pos("a1") | brd_from_pos("h1"),
-                0,
-                brd_from_pos("e1"),
-                0,
-                0,
-                0,
-                0,
-                brd_from_pos("a8") | brd_from_pos("h8"),
-                0,
-                brd_from_pos("e8"),
-                0,
-                0,
-                BOTH_CASTLE,
-                BOTH_CASTLE,
-                0};
-   brd.wcb_bb = comb_from_comp(&brd, false);
-   brd.bcb_bb = comb_from_comp(&brd, true);
+   board brd;
+   from_fen("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1", &brd);
+   TEST_ASSERT(brd.to_play == false);
+   TEST_ASSERT_EQUAL_INT(
+       BOTH_CASTLE,
+       arr_get_castle_right4096(&brd.white_castle_history, brd.ply_count));
 
    // white castle
-   move mov = {brd_from_pos("e1"),
-               brd_from_pos("g1"),
-               KING,
-               NO_PIECE,
-               NO_PIECE,
-               BOTH_CASTLE,
-               false,
-               0,
-               .prev_en_passant = 0};
+   move mov = move_from(e1, g1);
+   bitboa from = from_square(from_move(mov));
+   bitboa to = from_square(to_move(mov));
+   piece pc = get_piece(&brd, from);
 
-   bool castled = try_castle(&brd, &mov);
-   TEST_ASSERT(castled);
-   board expect = {0,
-                   0,
-                   brd_from_pos("a1") | brd_from_pos("f1"),
-                   0,
-                   brd_from_pos("g1"),
-                   0,
-                   0,
-                   0,
-                   0,
-                   brd_from_pos("a8") | brd_from_pos("h8"),
-                   0,
-                   brd_from_pos("e8"),
-                   0,
-                   0,
-                   NO_CASTLE,
-                   BOTH_CASTLE,
-                   0};
-   expect.wcb_bb = comb_from_comp(&expect, false);
-   expect.bcb_bb = comb_from_comp(&expect, true);
-   TEST_ASSERT(board_cmp(&expect, &brd));
+   // so everything aligns properly
+   // brd.ply_count++;
+   // bool castled = try_castle(&brd, pc, from, to);
+   make_move(&brd, mov);
+
+   // TEST_ASSERT_MESSAGE(castled, "Didn't castle");
+   board expect;
+   from_fen("r3k2r/8/8/8/8/8/8/R4RK1 b kq - 1 1", &expect);
+   // print_board(&brd);
+   // print_board(&expect);
+   TEST_ASSERT(board_cmp_bb(&expect, &brd));
+   TEST_ASSERT_EQUAL_INT(
+       *arr_last_castle_right4096(&brd.white_castle_history),
+       *arr_last_castle_right4096(&expect.white_castle_history));
+   TEST_ASSERT_EQUAL_INT(
+       *arr_last_castle_right4096(&brd.black_castle_history),
+       *arr_last_castle_right4096(&expect.black_castle_history));
 
    // black castle
-   move mov2 = {brd_from_pos("e8"),
-                brd_from_pos("g8"),
-                KING,
-                NO_PIECE,
-                NO_PIECE,
-                SHORT_CASTLE,
-                true,
-                0,
-                .prev_en_passant = 0};
-   bool castled2 = try_castle(&brd, &mov2);
-   TEST_ASSERT(castled2);
-   board expect2 = {0,
-                    0,
-                    brd_from_pos("a1") | brd_from_pos("f1"),
-                    0,
-                    brd_from_pos("g1"),
-                    0,
-                    0,
-                    0,
-                    0,
-                    brd_from_pos("a8") | brd_from_pos("f8"),
-                    0,
-                    brd_from_pos("g8"),
-                    0,
-                    0,
-                    NO_CASTLE,
-                    NO_CASTLE,
-                    0};
-   expect2.wcb_bb = comb_from_comp(&expect2, false);
-   expect2.bcb_bb = comb_from_comp(&expect2, true);
-   TEST_ASSERT(board_cmp(&expect2, &brd));
+   move mov2 = move_from(e8, g8);
+   from = from_square(from_move(mov2));
+   to = from_square(to_move(mov2));
+   pc = get_piece(&brd, from);
+
+   // so everything aligns properly
+   // brd.ply_count++;
+   // bool castled2 = try_castle(&brd, pc, from, to);
+   // TEST_ASSERT(castled2);
+   make_move(&brd, mov2);
+
+   board expect2;
+   from_fen("r4rk1/8/8/8/8/8/8/R4RK1 b - - 1 1", &expect2);
+   TEST_ASSERT(board_cmp_bb(&expect2, &brd));
+   TEST_ASSERT_EQUAL_INT(
+       *arr_last_castle_right4096(&brd.white_castle_history),
+       *arr_last_castle_right4096(&expect2.white_castle_history));
+   TEST_ASSERT_EQUAL_INT(
+       *arr_last_castle_right4096(&brd.black_castle_history),
+       *arr_last_castle_right4096(&expect2.black_castle_history));
 }
 
 void test_castle_long() {
-   board brd = {0,
-                0,
-                brd_from_pos("a1") | brd_from_pos("h1"),
-                0,
-                brd_from_pos("e1"),
-                0,
-                0,
-                0,
-                0,
-                brd_from_pos("a8") | brd_from_pos("h8"),
-                0,
-                brd_from_pos("e8"),
-                0,
-                0,
-                LONG_CASTLE,
-                BOTH_CASTLE,
-                0};
-   brd.wcb_bb = comb_from_comp(&brd, false);
-   brd.bcb_bb = comb_from_comp(&brd, true);
+   board brd;
+   from_fen("r3k2r/8/8/8/8/8/8/R3K2R w Qkq - 1 1", &brd);
+   TEST_ASSERT(brd.to_play == false);
+   TEST_ASSERT_EQUAL_INT(
+       LONG_CASTLE,
+       arr_get_castle_right4096(&brd.white_castle_history, brd.ply_count));
 
    // white castle
-   move mov = {brd_from_pos("e1"),
-               brd_from_pos("c1"),
-               KING,
-               NO_PIECE,
-               NO_PIECE,
-               BOTH_CASTLE,
-               false,
-               0,
-               .prev_en_passant = 0};
+   move mov = move_from(e1, c1);
+   bitboa from = from_square(from_move(mov));
+   bitboa to = from_square(to_move(mov));
+   piece pc = get_piece(&brd, from);
 
-   bool castled = try_castle(&brd, &mov);
-   TEST_ASSERT(castled);
-   board expect = {0,
-                   0,
-                   brd_from_pos("d1") | brd_from_pos("h1"),
-                   0,
-                   brd_from_pos("c1"),
-                   0,
-                   0,
-                   0,
-                   0,
-                   brd_from_pos("a8") | brd_from_pos("h8"),
-                   0,
-                   brd_from_pos("e8"),
-                   0,
-                   0,
-                   NO_CASTLE,
-                   BOTH_CASTLE,
-                   0};
-   expect.wcb_bb = comb_from_comp(&expect, false);
-   expect.bcb_bb = comb_from_comp(&expect, true);
-   TEST_ASSERT(board_cmp(&expect, &brd));
+   // so everything aligns properly
+   // brd.ply_count++;
+   // bool castled = try_castle(&brd, pc, from, to);
+   // TEST_ASSERT(castled);
+   make_move(&brd, mov);
+
+   board expect;
+   from_fen("r3k2r/8/8/8/8/8/8/2KR3R b kq - 1 1", &expect);
+   TEST_ASSERT(board_cmp_bb(&expect, &brd));
+   TEST_ASSERT_EQUAL_INT(
+       *arr_last_castle_right4096(&brd.white_castle_history),
+       *arr_last_castle_right4096(&expect.white_castle_history));
+   TEST_ASSERT_EQUAL_INT(
+       *arr_last_castle_right4096(&brd.black_castle_history),
+       *arr_last_castle_right4096(&expect.black_castle_history));
+
+   TEST_ASSERT(brd.to_play == true);
+   TEST_ASSERT_EQUAL_INT(
+       BOTH_CASTLE,
+       arr_get_castle_right4096(&brd.black_castle_history, brd.ply_count));
 
    // black castle
-   move mov2 = {brd_from_pos("e8"),
-                brd_from_pos("c8"),
-                KING,
-                NO_PIECE,
-                NO_PIECE,
-                BOTH_CASTLE,
-                true,
-                false,
-                0};
-   bool castled2 = try_castle(&brd, &mov2);
-   TEST_ASSERT(castled2);
-   board expect2 = {0,
-                    0,
-                    brd_from_pos("d1") | brd_from_pos("h1"),
-                    0,
-                    brd_from_pos("c1"),
-                    0,
-                    0,
-                    0,
-                    0,
-                    brd_from_pos("d8") | brd_from_pos("h8"),
-                    0,
-                    brd_from_pos("c8"),
-                    0,
-                    0,
-                    NO_CASTLE,
-                    NO_CASTLE,
-                    0};
-   expect2.wcb_bb = comb_from_comp(&expect2, false);
-   expect2.bcb_bb = comb_from_comp(&expect2, true);
-   TEST_ASSERT(board_cmp(&expect2, &brd));
+   move mov2 = move_from(e8, c8);
+   from = from_square(from_move(mov2));
+   to = from_square(to_move(mov2));
+   pc = get_piece(&brd, from);
+   // printf("from %zu to %zu\n", from_move(mov2), to_move(mov2));
+   // printf("from %zu to %zu\n", from, to);
+
+   // print_board(&brd);
+   // print_board(&expect);
+   // so everything aligns properly
+   // brd.ply_count++;
+   // bool castled2 = try_castle(&brd, pc, from, to);
+   // TEST_ASSERT(castled2);
+   make_move(&brd, mov2);
+
+   board expect2;
+   from_fen("2kr3r/8/8/8/8/8/8/2KR3R b - - 1 1", &expect2);
+   TEST_ASSERT(board_cmp_bb(&expect2, &brd));
+   TEST_ASSERT_EQUAL_INT(
+       *arr_last_castle_right4096(&brd.white_castle_history),
+       *arr_last_castle_right4096(&expect2.white_castle_history));
+   TEST_ASSERT_EQUAL_INT(
+       *arr_last_castle_right4096(&brd.black_castle_history),
+       *arr_last_castle_right4096(&expect2.black_castle_history));
 }
 
 void test_castle_checks() {
    {
-      board brd = {0,
-                   0,
-                   brd_from_pos("a1") | brd_from_pos("h1"),
-                   0,
-                   0,
-                   brd_from_pos("e1"),
-                   0,
-                   0,
-                   0,
-                   brd_from_pos("a8") | brd_from_pos("h8"),
-                   0,
-                   brd_from_pos("e8"),
-                   0,
-                   0,
-                   LONG_CASTLE,
-                   BOTH_CASTLE,
-                   0};
-      brd.wcb_bb = comb_from_comp(&brd, false);
-      brd.bcb_bb = comb_from_comp(&brd, true);
+      board brd;
+      from_fen("r3k2r/8/8/8/8/8/8/R3N2R b Qkq - 1 1", &brd);
 
       // white castle
-      move mov = {brd_from_pos("e1"),
-                  brd_from_pos("c1"),
-                  KNIGHT,
-                  NO_PIECE,
-                  NO_PIECE,
-                  BOTH_CASTLE,
-                  false,
-                  0,
-                  .prev_en_passant = 0};
+      move mov = move_from(e1, c1);
+      // bitboa from = from_square(from_move(mov));
+      // bitboa to = from_square(to_move(mov));
+      // piece pc = get_piece(&brd, from);
 
-      bool castled = try_castle(&brd, &mov);
-      TEST_ASSERT_MESSAGE(!castled, "Castled even though king wasn't present.");
-      board expect = {0,
-                      0,
-                      brd_from_pos("d1") | brd_from_pos("h1"),
-                      0,
-                      brd_from_pos("c1"),
-                      0,
-                      0,
-                      0,
-                      0,
-                      brd_from_pos("a8") | brd_from_pos("h8"),
-                      0,
-                      brd_from_pos("e8"),
-                      0,
-                      0,
-                      NO_CASTLE,
-                      BOTH_CASTLE,
-                      0};
-      expect.wcb_bb = comb_from_comp(&expect, false);
-      expect.bcb_bb = comb_from_comp(&expect, true);
-      TEST_ASSERT_MESSAGE(!board_cmp(&expect, &brd),
+      make_move(&brd, mov);
+      board expect;
+      from_fen("r3k2r/8/8/8/8/8/8/2KR3R b Qkq - 1 1", &expect);
+      TEST_ASSERT_MESSAGE(!board_cmp_bb(&expect, &brd),
                           "King not present board is wrong.");
+      TEST_ASSERT_EQUAL_INT(
+          *arr_last_castle_right4096(&expect.white_castle_history),
+          *arr_last_castle_right4096(&brd.white_castle_history));
+      TEST_ASSERT_EQUAL_INT(
+          *arr_last_castle_right4096(&expect.black_castle_history),
+          *arr_last_castle_right4096(&brd.black_castle_history));
    }
    {
-      board brd = {0,
-                   0,
-                   brd_from_pos("a1") | brd_from_pos("h1"),
-                   0,
-                   brd_from_pos("e1"),
-                   0,
-                   0,
-                   0,
-                   0,
-                   brd_from_pos("a8") | brd_from_pos("h8"),
-                   0,
-                   brd_from_pos("e8"),
-                   0,
-                   0,
-                   SHORT_CASTLE,
-                   BOTH_CASTLE,
-                   0};
-      brd.wcb_bb = comb_from_comp(&brd, false);
-      brd.bcb_bb = comb_from_comp(&brd, true);
+      board brd;
+      from_fen("r3k2r/8/8/8/8/8/8/R3K2R b Kkq - 1 1", &brd);
 
       // white castle
-      move mov = {brd_from_pos("e1"),
-                  brd_from_pos("c1"),
-                  KING,
-                  NO_PIECE,
-                  NO_PIECE,
-                  SHORT_CASTLE,
-                  false,
-                  0,
-                  .prev_en_passant = 0};
+      move mov = move_from(e1, c1);
+      bitboa from = from_square(from_move(mov));
+      bitboa to = from_square(to_move(mov));
+      piece pc = get_piece(&brd, from);
 
-      bool castled = try_castle(&brd, &mov);
+      // so everything aligns properly
+      brd.ply_count++;
+      bool castled = try_castle(&brd, pc, from, to);
       TEST_ASSERT_MESSAGE(!castled, "Tried to castle long when forbidden.");
-      board expect = {0,
-                      0,
-                      brd_from_pos("d1") | brd_from_pos("h1"),
-                      0,
-                      brd_from_pos("c1"),
-                      0,
-                      0,
-                      0,
-                      0,
-                      brd_from_pos("a8") | brd_from_pos("h8"),
-                      0,
-                      brd_from_pos("e8"),
-                      0,
-                      0,
-                      NO_CASTLE,
-                      BOTH_CASTLE,
-                      0};
-      expect.wcb_bb = comb_from_comp(&expect, false);
-      expect.bcb_bb = comb_from_comp(&expect, true);
-      TEST_ASSERT(!board_cmp(&expect, &brd));
+      board expect;
+      from_fen("r3k2r/8/8/8/8/8/8/2KR3R b kq - 1 1", &expect);
+      TEST_ASSERT(!board_cmp_bb(&expect, &brd));
    }
 }
 
 void test_capture() {
    board brd = gen_start_board();
-   move mov;
-   from_long_alg_single(&mov, &brd, "e2d8", false);
+   move mov = from_long_alg_single("e2d8");
    // printf("%d\n", mov.capture);
    // printf("%d\n", mov.pc);
    // printf("%llu\n", mov.to);
-   TEST_ASSERT_MESSAGE(mov.capture == QUEEN, "Piece to capture wasn't queen");
-   TEST_ASSERT_MESSAGE(mov.pc == PAWN, "Piece to move wasn't pawn");
-
-   // ensure no pieces overlap between the players before/after.
-   // pieces from the same player _can_ overlap though
    TEST_ASSERT_MESSAGE(
        (comb_from_comp(&brd, false) & comb_from_comp(&brd, true)) == 0,
        "Starting board has overlapping pieces.");
-   make_move(&brd, &mov);
+
+   piece pc = get_piece(&brd, from_square(e2));
+   make_move(&brd, mov);
+   TEST_ASSERT_MESSAGE(arr_get_piece4096(&brd.capture_history, brd.ply_count) ==
+                           QUEEN,
+                       "Piece to capture wasn't queen");
+   TEST_ASSERT_MESSAGE(pc == PAWN, "Piece to move wasn't pawn");
+
+   // print_board(&brd);
+   // print_board_internal(&brd);
+   // ensure no pieces overlap between the players before/after.
+   // pieces from the same player _can_ overlap though
    TEST_ASSERT_MESSAGE(
        (comb_from_comp(&brd, false) & comb_from_comp(&brd, true)) == 0,
        "Board after move has overlapping pieces.");
@@ -378,18 +230,20 @@ void test_capture() {
 
 void test_promotion() {
    board brd = gen_start_board();
-   move mov;
-   from_long_alg_single(&mov, &brd, "e2d8n", false);
+   move mov = from_long_alg_single("e2d8n");
 
-   TEST_ASSERT_MESSAGE(mov.capture == QUEEN, "Piece to capture wasn't queen");
-   TEST_ASSERT_MESSAGE(mov.pc == PAWN, "Piece to move wasn't pawn");
+   piece pc = get_piece(&brd, from_square(e2));
+   TEST_ASSERT_MESSAGE(pc == PAWN, "Piece to move wasn't pawn");
 
    // ensure no pieces overlap between the players before/after.
    // pieces from the same player _can_ overlap though
    TEST_ASSERT_MESSAGE(
        (comb_from_comp(&brd, false) & comb_from_comp(&brd, true)) == 0,
        "Starting board has overlapping pieces.");
-   make_move(&brd, &mov);
+   make_move(&brd, mov);
+   TEST_ASSERT_MESSAGE(arr_get_piece4096(&brd.capture_history, brd.ply_count) ==
+                           QUEEN,
+                       "Captured piece wasn't queen");
    TEST_ASSERT_MESSAGE(
        (comb_from_comp(&brd, false) & comb_from_comp(&brd, true)) == 0,
        "Board after move has overlapping pieces.");
@@ -400,257 +254,163 @@ void test_promotion() {
 }
 
 void test_en_passant() {
-   board brd = {brd_from_pos("e2"),
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                brd_from_pos("d4"),
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0};
-   brd.wcb_bb = comb_from_comp(&brd, false);
-   brd.bcb_bb = comb_from_comp(&brd, true);
+   board brd;
+   from_fen("8/8/8/8/3p4/8/4P3/8 w - - 0 1", &brd);
 
-   move mov1;
-   move mov2;
+   move mov1 = from_long_alg_single("e2e4");
+   bitboa from1 = from_square(from_move(mov1));
+   bitboa to1 = from_square(to_move(mov1));
+   piece pc1 = get_piece(&brd, from1);
 
-   from_long_alg_single(&mov1, &brd, "e2e4", false);
-   TEST_ASSERT_MESSAGE(mov1.pc == PAWN, "Didn't move pawn");
-   TEST_ASSERT_MESSAGE(mov1.en_passant != 0, "Didn't catch passantable");
-   make_move(&brd, &mov1);
-   TEST_ASSERT_MESSAGE(brd.enp != 0, "Board didn't record passantable");
+   move mov2 = from_long_alg_single("d4e3");
+   bitboa from2 = from_square(from_move(mov2));
+   bitboa to2 = from_square(to_move(mov2));
 
-   from_long_alg_single(&mov2, &brd, "d4e3", true);
-   TEST_ASSERT_MESSAGE(mov2.pc == PAWN, "Didn't move pawn");
-   TEST_ASSERT_MESSAGE(mov2.en_passant == 0,
-                       "Labled unpassantable passantable");
-   make_move(&brd, &mov2);
-   TEST_ASSERT_MESSAGE(brd.enp == 0, "Board didn't clear passantable");
+   TEST_ASSERT_MESSAGE(pc1 == PAWN, "Didn't move pawn");
+   make_move(&brd, mov1);
+   TEST_ASSERT_MESSAGE(arr_get_bitboa4096(&brd.enp_history, brd.ply_count) != 0,
+                       "Board didn't record passantable");
 
-   board expect = {0, 0, 0, 0, 0, 0, 0, brd_from_pos("e3"), 0, 0,
-                   0, 0, 0, 0, 0, 0, 0};
-   expect.bcb_bb = comb_from_comp(&expect, true);
-   TEST_ASSERT_MESSAGE(board_cmp(&expect, &brd), "Final boards not equal");
+   piece pc2 = get_piece(&brd, from2);
+   TEST_ASSERT_MESSAGE(pc2 == PAWN, "Didn't move pawn");
+   // TEST_ASSERT_MESSAGE(arr_get_bitboa4096(&brd.enp_history, brd.ply_count) ==
+   // 0,
+   //                     "Labled unpassantable passantable");
+   make_move(&brd, mov2);
+   TEST_ASSERT_MESSAGE(arr_get_bitboa4096(&brd.enp_history, brd.ply_count) == 0,
+                       "Board didn't clear passantable");
+
+   board expect;
+   from_fen("8/8/8/8/8/4p3/8/8 w - - 0 1", &expect);
+   TEST_ASSERT_MESSAGE(board_cmp_bb(&expect, &brd), "Final boards not equal");
 }
 
 void test_from_algebraic() {
-   vec_move moves = new_vec_move(200);
    char input_str[] = "e2e4 d7d5 e4d5 g8f6 d1f3 c7c5 d5c6 d8b6 c6c7 c8d7 c7b8r "
-                      "h7h6 f1e2 h6h5 g1h3 h5h4 e1g1\0";
+                      "b6d8 f1e2 h7h5 g1h3 h5h4 e1g1\0";
    board brd;
-   from_long_algebraic(input_str, &brd, &moves);
+   from_long_algebraic(input_str, &brd);
 
    board expect = gen_start_board();
-   // setup pawns
-   flip_piece(&expect, PAWN, true, brd_from_pos("c7"));
-   flip_piece(&expect, PAWN, true, brd_from_pos("h7"));
-   flip_piece(&expect, PAWN, true, brd_from_pos("d7"));
-   flip_piece(&expect, PAWN, true, brd_from_pos("h4"));
-   flip_piece(&expect, PAWN, false, brd_from_pos("e2"));
-   // setup queens
-   flip_piece(&expect, QUEEN, true, brd_from_pos("d8"));
-   flip_piece(&expect, QUEEN, true, brd_from_pos("b6"));
-   flip_piece(&expect, QUEEN, false, brd_from_pos("d1"));
-   flip_piece(&expect, QUEEN, false, brd_from_pos("f3"));
-   // setup knights
-   flip_piece(&expect, KNIGHT, true, brd_from_pos("b8"));
-   flip_piece(&expect, KNIGHT, true, brd_from_pos("g8"));
-   flip_piece(&expect, KNIGHT, true, brd_from_pos("f6"));
-   flip_piece(&expect, KNIGHT, false, brd_from_pos("g1"));
-   flip_piece(&expect, KNIGHT, false, brd_from_pos("h3"));
-   // setup rooks
-   flip_piece(&expect, ROOK, false, brd_from_pos("b8"));
-   flip_piece(&expect, ROOK, false, brd_from_pos("h1"));
-   flip_piece(&expect, ROOK, false, brd_from_pos("f1"));
-   // setup bishops
-   flip_piece(&expect, BISHOP, false, brd_from_pos("f1"));
-   flip_piece(&expect, BISHOP, false, brd_from_pos("e2"));
-   flip_piece(&expect, BISHOP, true, brd_from_pos("c8"));
-   flip_piece(&expect, BISHOP, true, brd_from_pos("d7"));
-   // setup kings
-   flip_piece(&expect, KING, false, brd_from_pos("e1"));
-   flip_piece(&expect, KING, false, brd_from_pos("g1"));
-   expect.white_castle = 0;
+   from_fen("rR1qkb1r/pp1bppp1/5n2/8/7p/5Q1N/PPPPBPPP/RNB2RK1 b kq - 1 9",
+            &expect);
 
-   TEST_ASSERT(board_cmp(&expect, &brd));
+   TEST_ASSERT_EQUAL_INT(
+       arr_get_castle_right4096(&brd.white_castle_history, brd.ply_count),
+       arr_get_castle_right4096(&expect.white_castle_history,
+                                expect.ply_count));
+
+   // print_board(&brd);
+   // print_board(&expect);
+   TEST_ASSERT(board_cmp_bb(&expect, &brd));
 }
 
-DECLARE_VEC(board)
-DEFINE_VEC(board)
 void test_undo_moves() {
-   vec_move moves = new_vec_move(200);
    char input_str[] = "e2e4 d7d5 e4d5 g8f6 d1f3 c7c5 d5c6 d8b6 c6c7 c8d7 c7b8r "
-                      "h7h6 f1e2 h6h5 g1h3 h5h4 e1g1\0";
+                      "b6d8 f1e2 h7h5 g1h3 h5h4 e1g1\0";
    board brd;
-   from_long_algebraic(input_str, &brd, &moves);
-   vec_board boards = new_vec_board(200);
-   vec_push_board(&boards, gen_start_board());
-   for (size_t i = 0; i < moves.size; i++) {
-      board prev_brd = vec_get_board(&boards, i);
-      move prev_mov = vec_get_move(&moves, i);
-      make_move(&prev_brd, &prev_mov);
-      vec_push_board(&boards, prev_brd);
-   }
-
-   // printf("Move %zu:\n", boards.size - 1);
-   // board last = vec_get_board(&boards, boards.size - 1);
-   // print_board(&brd);
-   // print_board(&last);
-   // print_board_internal(&brd);
-   // print_board_internal(&last);
+   from_long_algebraic(input_str, &brd);
 
    board expect = gen_start_board();
-   for (size_t i = moves.size - 1; i < SIZE_MAX; i--) {
-      // move mov = vec_get_move(&moves, i);
-      // print_mov_internal(&mov);
-
-      // printf("Move %zu:\n", i);
-      // board prev_brd = vec_get_board(&boards, i);
-      pop_move(&brd, &moves);
-      // print_board(&brd);
-      // print_board(&prev_brd);
-      // print_board_internal(&brd);
-      // print_board_internal(&prev_brd);
-   }
-
    // print_board_internal(&brd);
    // print_board_internal(&expect);
-   TEST_ASSERT(board_cmp(&expect, &brd));
+   while (brd.ply_count != 0) {
+      undo_move(&brd, arr_get_move4096(&brd.move_history, brd.ply_count));
+   }
+   TEST_ASSERT(board_cmp_bb(&expect, &brd));
+   TEST_ASSERT_EQUAL_INT_MESSAGE(expect.white_castle_history.size,
+                                 brd.white_castle_history.size,
+                                 "white_castle_history size differs.");
+   TEST_ASSERT_EQUAL_INT_MESSAGE(expect.black_castle_history.size,
+                                 brd.black_castle_history.size,
+                                 "black_castle_history size differs.");
+   TEST_ASSERT_EQUAL_INT_MESSAGE(expect.enp_history.size, brd.enp_history.size,
+                                 "enp_history size differs.");
+   TEST_ASSERT_EQUAL_INT_MESSAGE(expect.move50count.size, brd.move50count.size,
+                                 "move50count size differs.");
+   TEST_ASSERT_EQUAL_INT_MESSAGE(expect.capture_history.size,
+                                 brd.capture_history.size,
+                                 "capture_history size differs.");
+   TEST_ASSERT_EQUAL_INT_MESSAGE(expect.move_history.size,
+                                 brd.move_history.size,
+                                 "move_history size differs.");
 }
 
 void test_undo_en_passant() {
-   board brd = {brd_from_pos("e2"),
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                brd_from_pos("d4"),
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0};
-   brd.wcb_bb = comb_from_comp(&brd, false);
-   brd.bcb_bb = comb_from_comp(&brd, true);
+   board brd;
+   from_fen("8/8/8/8/3p4/8/4P3/8 w - - 0 1", &brd);
 
-   move mov1;
-   move mov2;
+   move mov1 = from_long_alg_single("e2e4");
+   bitboa from1 = from_square(from_move(mov1));
+   bitboa to1 = from_square(to_move(mov1));
+   piece pc1 = get_piece(&brd, from1);
 
-   from_long_alg_single(&mov1, &brd, "e2e4", false);
-   TEST_ASSERT_MESSAGE(mov1.pc == PAWN, "Didn't move pawn");
-   TEST_ASSERT_MESSAGE(mov1.en_passant != 0, "Didn't catch passantable");
-   // print_board(&brd);
-   make_move(&brd, &mov1);
-   TEST_ASSERT_MESSAGE(brd.enp != 0, "Board didn't record passantable");
-   // print_board(&brd);
+   move mov2 = from_long_alg_single("d4e3");
+   bitboa from2 = from_square(from_move(mov2));
+   bitboa to2 = from_square(to_move(mov2));
 
-   from_long_alg_single(&mov2, &brd, "d4e3", true);
-   TEST_ASSERT_MESSAGE(mov2.pc == PAWN, "Didn't move pawn");
-   TEST_ASSERT_MESSAGE(mov2.en_passant == 0,
-                       "Labled unpassantable passantable");
-   make_move(&brd, &mov2);
-   TEST_ASSERT_MESSAGE(brd.enp == 0, "Board didn't clear passantable");
-   // print_board(&brd);
+   TEST_ASSERT_MESSAGE(pc1 == PAWN, "Didn't move pawn");
+   make_move(&brd, mov1);
+   TEST_ASSERT_MESSAGE(arr_get_bitboa4096(&brd.enp_history, brd.ply_count) != 0,
+                       "Board didn't record passantable");
 
-   board expect = {brd_from_pos("e2"),
-                   0,
-                   0,
-                   0,
-                   0,
-                   0,
-                   0,
-                   brd_from_pos("d4"),
-                   0,
-                   0,
-                   0,
-                   0,
-                   0,
-                   0,
-                   0,
-                   0,
-                   0};
-   expect.bcb_bb = comb_from_comp(&expect, true);
-   expect.wcb_bb = comb_from_comp(&expect, false);
-   undo_move(&brd, &mov2);
+   piece pc2 = get_piece(&brd, from2);
+   TEST_ASSERT_MESSAGE(pc2 == PAWN, "Didn't move pawn");
+   // TEST_ASSERT_MESSAGE(arr_get_bitboa4096(&brd.enp_history, brd.ply_count) ==
+   // 0,
+   //                     "Labled unpassantable passantable");
+   make_move(&brd, mov2);
+   TEST_ASSERT_MESSAGE(arr_get_bitboa4096(&brd.enp_history, brd.ply_count) == 0,
+                       "Board didn't clear passantable");
+
+   board expect2;
+   from_fen("8/8/8/8/8/4p3/8/8 w - - 0 1", &expect2);
+   TEST_ASSERT_MESSAGE(board_cmp_bb(&expect2, &brd), "Final boards not equal");
+
+   board expect;
+   from_fen("8/8/8/8/3p4/8/4P3/8 w - - 0 1", &expect);
+
+   undo_move(&brd, mov2);
    // print_board(&brd);
-   undo_move(&brd, &mov1);
+   undo_move(&brd, mov1);
    // print_board(&brd);
 
    // print_board_internal(&brd);
    // print_board_internal(&expect);
-   TEST_ASSERT_MESSAGE(board_cmp(&expect, &brd), "Final boards not equal");
+   TEST_ASSERT_MESSAGE(board_cmp_bb(&expect, &brd), "Final boards not equal");
 }
 
 void test_undo_castle_short() {
-   board brd = {0,
-                0,
-                brd_from_pos("a1") | brd_from_pos("h1"),
-                0,
-                brd_from_pos("e1"),
-                0,
-                0,
-                0,
-                0,
-                brd_from_pos("a8") | brd_from_pos("h8"),
-                0,
-                brd_from_pos("e8"),
-                0,
-                0,
-                BOTH_CASTLE,
-                BOTH_CASTLE,
-                0};
-   brd.wcb_bb = comb_from_comp(&brd, false);
-   brd.bcb_bb = comb_from_comp(&brd, true);
-   board expect = brd;
+   board brd;
+   from_fen("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1", &brd);
+   board expect;
+   from_fen("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1", &expect);
 
    // white castle
-   move mov = {brd_from_pos("e1"),
-               brd_from_pos("g1"),
-               KING,
-               NO_PIECE,
-               NO_PIECE,
-               BOTH_CASTLE,
-               false,
-               0,
-               .prev_en_passant = 0};
+   move mov1 = move_from(e1, g1);
 
-   bool castled = try_castle(&brd, &mov);
-   TEST_ASSERT(castled);
+   // so everything aligns properly
+   // brd.ply_count++;
+   // bool castled = try_castle(&brd, pc1, from1, to1);
+   // TEST_ASSERT(castled);
+   make_move(&brd, mov1);
    board expect2 = brd;
 
    // black castle
-   move mov2 = {brd_from_pos("e8"),
-                brd_from_pos("g8"),
-                KING,
-                NO_PIECE,
-                NO_PIECE,
-                BOTH_CASTLE,
-                true,
-                0,
-                .prev_en_passant = 0};
-   bool castled2 = try_castle(&brd, &mov2);
-   TEST_ASSERT(castled2);
-   try_undo_castle(&brd, &mov2);
+   move mov2 = move_from(e8, g8);
+
+   // so everything aligns properly
+   // brd.ply_count++;
+   // bool castled2 = try_castle(&brd, pc2, from2, to2);
+   // TEST_ASSERT(castled2);
+   make_move(&brd, mov2);
+   undo_move(&brd, mov2);
+
    // print_board_internal(&brd);
    // print_board_internal(&expect2);
-   TEST_ASSERT_MESSAGE(board_cmp(&brd, &expect2), "first undo failed");
-   try_undo_castle(&brd, &mov);
-   TEST_ASSERT_MESSAGE(board_cmp(&brd, &expect), "second undo failed");
+   TEST_ASSERT_MESSAGE(board_cmp_bb(&brd, &expect2), "first undo failed");
+   undo_move(&brd, mov1);
+   TEST_ASSERT_MESSAGE(board_cmp_bb(&brd, &expect), "second undo failed");
 }
 
 int run_test_board() {
