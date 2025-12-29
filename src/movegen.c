@@ -24,6 +24,7 @@ inline square bitscan_msb(bitboa inp) { return 63 - __builtin_clzll(inp); }
 inline square bitscan_lsb(bitboa inp) { return __builtin_ctzll(inp); }
 
 inline bitboa bswap(bitboa inp) { return __builtin_bswap64(inp); }
+inline uint32_t bit_count(bitboa inp) { return __builtin_popcount(inp); }
 
 bitboa from_move_list(arr_move256 *move_list) {
    bitboa tot = 0;
@@ -88,11 +89,12 @@ bitboa get_castle_move(board *brd) {
       castle_right castle =
           arr_get_castle_right4096(&brd->black_castle_history, brd->ply_count);
       int has_right_s = castle & SHORT_CASTLE;
-      bool has_space_s =
-          (brd->bcb_bb & (from_square(f8) | from_square(g8))) == 0;
+      bool has_space_s = ((brd->bcb_bb | brd->wcb_bb) &
+                          (from_square(f8) | from_square(g8))) == 0;
       int has_right_l = castle & LONG_CASTLE;
-      bool has_space_l = (brd->bcb_bb & (from_square(b8) | from_square(c8) |
-                                         from_square(d8))) == 0;
+      bool has_space_l =
+          ((brd->bcb_bb | brd->wcb_bb) &
+           (from_square(b8) | from_square(c8) | from_square(d8))) == 0;
 
       if (has_right_s && has_space_s)
          shortc = from_square(g8);
@@ -102,11 +104,12 @@ bitboa get_castle_move(board *brd) {
       castle_right castle =
           arr_get_castle_right4096(&brd->white_castle_history, brd->ply_count);
       int has_right_s = castle & SHORT_CASTLE;
-      bool has_space_s =
-          (brd->wcb_bb & (from_square(f1) | from_square(g1))) == 0;
+      bool has_space_s = ((brd->bcb_bb | brd->wcb_bb) &
+                          (from_square(f1) | from_square(g1))) == 0;
       int has_right_l = castle & LONG_CASTLE;
-      bool has_space_l = (brd->wcb_bb & (from_square(b1) | from_square(c1) |
-                                         from_square(d1))) == 0;
+      bool has_space_l =
+          ((brd->bcb_bb | brd->wcb_bb) &
+           (from_square(b1) | from_square(c1) | from_square(d1))) == 0;
 
       if (has_right_s && has_space_s)
          shortc = from_square(g1);
@@ -244,10 +247,24 @@ inline bitboa wpawn_capture_west(board *brd) {
    return ret;
 }
 
+inline bitboa wpawn_attack_west(board *brd) {
+   bitboa ret = brd->wpa_bb;
+   ret = ret & (~file1);
+   ret = (ret << 7);
+   return ret;
+}
+
 inline bitboa wpawn_capture_east(board *brd) {
    bitboa ret = brd->wpa_bb;
    ret = ret & (~file8);
    ret = (ret << 9) & brd->bcb_bb;
+   return ret;
+}
+
+inline bitboa wpawn_attack_east(board *brd) {
+   bitboa ret = brd->wpa_bb;
+   ret = ret & (~file8);
+   ret = (ret << 9);
    return ret;
 }
 
@@ -258,10 +275,24 @@ inline bitboa bpawn_capture_west(board *brd) {
    return ret;
 }
 
+inline bitboa bpawn_attack_west(board *brd) {
+   bitboa ret = brd->bpa_bb;
+   ret = ret & (~file1);
+   ret = (ret >> 9);
+   return ret;
+}
+
 inline bitboa bpawn_capture_east(board *brd) {
    bitboa ret = brd->bpa_bb;
    ret = ret & (~file8);
    ret = (ret >> 7) & brd->wcb_bb;
+   return ret;
+}
+
+inline bitboa bpawn_attack_east(board *brd) {
+   bitboa ret = brd->bpa_bb;
+   ret = ret & (~file8);
+   ret = (ret >> 7);
    return ret;
 }
 
@@ -289,7 +320,6 @@ inline bitboa bpawn_en_passant_west(bitboa bpa_bb, bitboa enp) {
    return ret;
 }
 
-// arr_get_bitboa4096(&brd->enp_history, brd->ply_count - 1);
 inline bitboa bpawn_en_passant_east(bitboa bpa_bb, bitboa enp) {
    bitboa ret = bpa_bb;
    bitboa rete = ret & (~file8);
@@ -297,19 +327,6 @@ inline bitboa bpawn_en_passant_east(bitboa bpa_bb, bitboa enp) {
 
    ret = rete >> 8;
    return ret;
-}
-
-bitboa wpromotion(bitboa wpa_bb, bitboa wcb_bb, bitboa bcb_bb) {
-   bitboa top = wpa_bb & rank7;
-   bitboa west_cap = ((top & ~file1) << 9) & bcb_bb;
-   bitboa east_cap = ((top & ~file8) << 7) & bcb_bb;
-   return west_cap | east_cap | ((top << 8) & ~(wcb_bb | bcb_bb));
-}
-bitboa bpromotion(bitboa bpa_bb, bitboa wcb_bb, bitboa bcb_bb) {
-   bitboa bottom = bpa_bb & rank2;
-   bitboa west_cap = ((bottom & ~file1) >> 7) & wcb_bb;
-   bitboa east_cap = ((bottom & ~file8) >> 9) & wcb_bb;
-   return west_cap | east_cap | ((bottom >> 8) & ~(wcb_bb | bcb_bb));
 }
 
 inline void promote_push(arr_move256 *move_list, square pawn_pos, square to) {
@@ -345,23 +362,19 @@ void add_pawn_moves(board *brd, arr_move256 *move_list) {
 
       // pawn west captures
       bitboa west_cap = bpawn_capture_west(brd);
-      bitboa west_enp = bpawn_en_passant_west(brd->bpa_bb, enp);
 
       // pawn east captures
       bitboa east_cap = bpawn_capture_east(brd);
-      bitboa east_enp = bpawn_en_passant_east(brd->bpa_bb, enp);
 
       while (from_bb != 0) {
          square pawn_pos = bitscan_lsb(from_bb);
          bitboa pawn_bb = from_square(pawn_pos);
          from_bb ^= pawn_bb;
-         int rank = pawn_pos / 8;
-         int file = pawn_pos % 8;
 
          // captures
          if (((pawn_bb & ~file1) >> 9) & west_cap) {
             square to = bitscan_lsb(pawn_bb >> 9);
-            if (bpromotion(pawn_bb, brd->wcb_bb, brd->bcb_bb)) {
+            if (to / 8 == 0) {
                promote_push(move_list, pawn_pos, to);
 
             } else {
@@ -371,7 +384,7 @@ void add_pawn_moves(board *brd, arr_move256 *move_list) {
          }
          if (((pawn_bb & ~file8) >> 7) & east_cap) {
             square to = bitscan_lsb(pawn_bb >> 7);
-            if (bpromotion(pawn_bb, brd->wcb_bb, brd->bcb_bb)) {
+            if (to / 8 == 0) {
                promote_push(move_list, pawn_pos, to);
             } else {
                move mov = move_from(pawn_pos, to);
@@ -381,7 +394,7 @@ void add_pawn_moves(board *brd, arr_move256 *move_list) {
          // pushes
          if ((pawn_bb >> 8) & push1) {
             square to = bitscan_lsb(pawn_bb >> 8);
-            if (bpromotion(pawn_bb, brd->wcb_bb, brd->bcb_bb)) {
+            if (to / 8 == 0) {
                promote_push(move_list, pawn_pos, to);
             } else {
                move mov = move_from(pawn_pos, to);
@@ -415,11 +428,9 @@ void add_pawn_moves(board *brd, arr_move256 *move_list) {
 
       // pawn west captures
       bitboa west_cap = wpawn_capture_west(brd);
-      bitboa west_enp = wpawn_en_passant_west(brd->wpa_bb, enp);
 
       // pawn east captures
       bitboa east_cap = wpawn_capture_east(brd);
-      bitboa east_enp = wpawn_en_passant_east(brd->wpa_bb, enp);
 
       while (from_bb != 0) {
          square pawn_pos = bitscan_lsb(from_bb);
@@ -431,7 +442,7 @@ void add_pawn_moves(board *brd, arr_move256 *move_list) {
          // captures
          if (((pawn_bb & ~file1) << 7) & west_cap) {
             square to = bitscan_lsb(pawn_bb << 7);
-            if (wpromotion(pawn_bb, brd->wcb_bb, brd->bcb_bb)) {
+            if (to / 8 == 7) {
                promote_push(move_list, pawn_pos, to);
             } else {
                move mov = move_from(pawn_pos, to);
@@ -440,7 +451,7 @@ void add_pawn_moves(board *brd, arr_move256 *move_list) {
          }
          if (((pawn_bb & ~file8) << 9) & east_cap) {
             square to = bitscan_lsb(pawn_bb << 9);
-            if (wpromotion(pawn_bb, brd->wcb_bb, brd->bcb_bb)) {
+            if (to / 8 == 7) {
                promote_push(move_list, pawn_pos, to);
             } else {
                move mov = move_from(pawn_pos, to);
@@ -450,7 +461,7 @@ void add_pawn_moves(board *brd, arr_move256 *move_list) {
          // pushes
          if ((pawn_bb << 8) & push1) {
             square to = bitscan_lsb(pawn_bb << 8);
-            if (wpromotion(pawn_bb, brd->wcb_bb, brd->bcb_bb)) {
+            if (to / 8 == 7) {
                promote_push(move_list, pawn_pos, to);
             } else {
                move mov = move_from(pawn_pos, to);
@@ -465,18 +476,12 @@ void add_pawn_moves(board *brd, arr_move256 *move_list) {
          // en passant
          // west
          if (((pawn_bb & ~file1) >> 1) & enp) {
-            // puts("??");
-            // print_bitboard(pawn_bb);
-            // print_bitboard(from_bb);
             square to = bitscan_lsb(pawn_bb << 7);
             move mov = move_from(pawn_pos, to);
             arr_push_move256(move_list, mov);
          }
          // east
          if (((pawn_bb & ~file8) << 1) & enp) {
-            // puts("?? ??");
-            // print_bitboard(pawn_bb);
-            // print_bitboard(from_bb);
             square to = bitscan_lsb(pawn_bb << 9);
             move mov = move_from(pawn_pos, to);
             arr_push_move256(move_list, mov);
@@ -484,8 +489,6 @@ void add_pawn_moves(board *brd, arr_move256 *move_list) {
       }
    }
 }
-
-// insert rest of pawn here :P
 
 // see chess programming wiki c impl lol?
 bitboa hyperbola_quintessence(const bitboa occupancy, const square sq,
@@ -714,14 +717,14 @@ bitboa get_attack_bb(board *brd) {
       if (brd->to_play) {
          if (brd->bpa_bb == 0)
             break;
-         bitboa caps = bpawn_capture_east(brd) | bpawn_capture_west(brd) |
+         bitboa caps = bpawn_attack_east(brd) | bpawn_attack_west(brd) |
                        bpawn_en_passant_east(brd->bpa_bb, enp) |
                        bpawn_en_passant_west(brd->bpa_bb, enp);
          tot |= caps;
       } else {
          if (brd->wpa_bb == 0)
             break;
-         bitboa caps = wpawn_capture_east(brd) | wpawn_capture_west(brd) |
+         bitboa caps = wpawn_attack_east(brd) | wpawn_attack_west(brd) |
                        wpawn_en_passant_east(brd->bpa_bb, enp) |
                        wpawn_en_passant_west(brd->bpa_bb, enp);
          tot |= caps;
@@ -830,25 +833,54 @@ bitboa get_attack_bb(board *brd) {
    return tot;
 }
 
-// only checks for if king is in check
-// bool is_legal(board *brd) {
-//    bitboa attacks = get_attack_bb(brd);
-//    if (brd->to_play) {
-//       return !(attacks & brd->bki_bb);
-//    } else {
-//       return !(attacks & brd->wki_bb);
-//    }
-// }
+// if previous was castle,
+// and king movement overlaps attack bitboard,
+// then not legal
+bool white_illegal_castle(board *brd, bitboa attacks) {
+   move mov = arr_get_move4096(&brd->move_history, brd->ply_count);
+   if ((from_move(mov) == e1) && (to_move(mov) == g1) &&
+       (get_piece(brd, from_square(g1)) == KING) &&
+       (attacks & (from_square(e1) | from_square(f1) | from_square(g1))))
+      return true;
+   if ((from_move(mov) == e1) && (to_move(mov) == c1) &&
+       (get_piece(brd, from_square(c1)) == KING) &&
+       (attacks & (from_square(e1) | from_square(d1) | from_square(c1))))
+      return true;
 
-bool in_check(board *brd, bool to_play) {
+   return false;
+}
+
+// if previous was castle,
+// and king movement overlaps attack bitboard,
+// then not legal
+bool black_illegal_castle(board *brd, bitboa attacks) {
+   move mov = arr_get_move4096(&brd->move_history, brd->ply_count);
+   if ((from_move(mov) == e8) && (to_move(mov) == g8) &&
+       (get_piece(brd, from_square(g8)) == KING) &&
+       (attacks & (from_square(e8) | from_square(f8) | from_square(g8))))
+      return true;
+   if ((from_move(mov) == e8) && (to_move(mov) == c8) &&
+       (get_piece(brd, from_square(c8)) == KING) &&
+       (attacks & (from_square(e8) | from_square(d8) | from_square(c8))))
+      return true;
+   return false;
+}
+
+bool prev_wasnt_legal(board *brd, bool to_play) {
    bool prev = brd->to_play;
    brd->to_play = !to_play;
    bitboa attacks = get_attack_bb(brd);
    brd->to_play = prev;
 
    if (to_play) {
+      if (black_illegal_castle(brd, attacks))
+         return true;
+
       return attacks & brd->bki_bb;
    } else {
+      if (white_illegal_castle(brd, attacks))
+         return true;
+
       return attacks & brd->wki_bb;
    }
 }
@@ -856,20 +888,11 @@ bool in_check(board *brd, bool to_play) {
 // doesn't check for king safety
 void get_pseudolegal_moves(board *brd, arr_move256 *move_list) {
    add_pawn_moves(brd, move_list);
-   // print_bitboard(wget_pawn_push2(brd));
-   // print_bitboard(rank2);
-   // printf("%zu\n", move_list->size);
    add_queen_moves(brd, move_list);
-   // printf("%zu\n", move_list->size);
    add_rook_moves(brd, move_list);
-   // printf("%zu\n", move_list->size);
    add_knight_moves(brd, move_list);
-   // printf("%zu\n", move_list->size);
    add_bishop_moves(brd, move_list);
-   // printf("%zu\n", move_list->size);
    add_king_moves(brd, move_list);
-   // printf("pseudolegals: %zu\n", move_list->size);
-   // print_bitboard(get_attack_bb(brd));
 }
 
 // pseudolegal, but filters for when king in check
@@ -880,7 +903,7 @@ void get_legal_moves(board *brd, arr_move256 *move_list) {
    for (uint32_t i = 0; i < pseudos.size; i++) {
       move mov = arr_get_move256(&pseudos, i);
       make_move(brd, mov);
-      if (!in_check(brd, !brd->to_play))
+      if (!prev_wasnt_legal(brd, !brd->to_play))
          arr_push_move256(move_list, mov);
       undo_move(brd, mov);
    }
@@ -904,12 +927,11 @@ uint64_t perft(board *brd, int depth) {
    }
    get_pseudolegal_moves(brd, &move_list);
 
-   // get_pseudolegal_moves(brd, &move_list);
    uint64_t moves = 0;
    for (uint32_t i = 0; i < move_list.size; i++) {
       move mov = arr_get_move256(&move_list, i);
       make_move(brd, mov);
-      if (!in_check(brd, !brd->to_play)) {
+      if (!prev_wasnt_legal(brd, !brd->to_play)) {
          moves += perft(brd, depth - 1);
       }
       undo_move(brd, mov);
@@ -943,7 +965,7 @@ uint64_t perft_debug(FILE *f, board *brd, int depth) {
    for (uint32_t i = 0; i < move_list.size; i++) {
       move mov = arr_get_move256(&move_list, i);
       make_move(brd, mov);
-      if (!in_check(brd, !brd->to_play)) {
+      if (!prev_wasnt_legal(brd, !brd->to_play)) {
          uint64_t pcount = perft(brd, depth - 1);
          if (print_moves) {
             print_move_short(f, mov, pcount);

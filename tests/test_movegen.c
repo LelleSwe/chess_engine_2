@@ -6,8 +6,8 @@ void test_in_check() {
    board brd;
    from_fen("rnbq1bnr/pppppppp/8/8/8/3k4/PPPPPPPP/RNBQKBNR w KQ - 0 1", &brd);
 
-   TEST_ASSERT(in_check(&brd, true));
-   TEST_ASSERT(!in_check(&brd, false));
+   TEST_ASSERT(prev_wasnt_legal(&brd, true));
+   TEST_ASSERT(!prev_wasnt_legal(&brd, false));
 }
 
 void test_ong_idk() {
@@ -327,7 +327,7 @@ void test_kings_right_pawn_illegal_move_into_black_west_capture() {
 
    TEST_ASSERT(bpawn_capture_west(&brd));
    // print_bitboard(get_attack_bb(&brd));
-   TEST_ASSERT(in_check(&brd, false));
+   TEST_ASSERT(prev_wasnt_legal(&brd, false));
 }
 
 void test_do_not_white_short_castle_through_bishop() {
@@ -350,75 +350,88 @@ void test_do_not_white_short_castle_through_bishop() {
 }
 
 void test_perft1() {
-   // board brd = gen_start_board();
+   uint64_t ans = 20;
    board brd;
    from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", &brd);
    CLOCK_START();
    uint64_t res = perft(&brd, 1);
 
    CLOCK_END();
+   printf("nps: %.9f\n", (double)ans / TIME_TAKEN);
    // printf("%zu\n", res);
-   TEST_ASSERT_EQUAL(20, res);
+   TEST_ASSERT_EQUAL(ans, res);
 }
 
 void test_perft2() {
+   uint64_t ans = 400;
    board brd = gen_start_board();
    CLOCK_START();
    uint64_t res = perft(&brd, 2);
 
    CLOCK_END();
+   printf("nps: %.9f\n", (double)ans / TIME_TAKEN);
    // printf("%zu\n", res);
-   TEST_ASSERT_EQUAL(400, res);
+   TEST_ASSERT_EQUAL(ans, res);
 }
 
 void test_perft3() {
+   uint64_t ans = 8902;
    board brd = gen_start_board();
    CLOCK_START();
    uint64_t res = perft(&brd, 3);
 
    CLOCK_END();
+   printf("nps: %.9f\n", (double)ans / TIME_TAKEN);
    // printf("%zu\n", res);
-   TEST_ASSERT_EQUAL(8902, res);
+   TEST_ASSERT_EQUAL(ans, res);
 }
 
 void test_perft4() {
+   uint64_t ans = 197'281;
    board brd = gen_start_board();
    CLOCK_START();
    uint64_t res = perft(&brd, 4);
 
    CLOCK_END();
+   printf("nps: %.9f\n", (double)ans / TIME_TAKEN);
    // printf("%zu\n", res);
-   TEST_ASSERT_EQUAL(197'281, res);
+   TEST_ASSERT_EQUAL(ans, res);
 }
 
 void test_perft5() {
+   uint64_t ans = 4'865'609;
    board brd = gen_start_board();
    CLOCK_START();
    uint64_t res = perft(&brd, 5);
 
    CLOCK_END();
+   printf("nps: %.9f\n", (double)ans / TIME_TAKEN);
    // printf("%zu\n", res);
-   TEST_ASSERT_EQUAL(4'865'609, res);
+   TEST_ASSERT_EQUAL(ans, res);
 }
 
 void test_perft6() {
+   uint64_t ans = 119'060'324;
    board brd = gen_start_board();
    CLOCK_START();
    uint64_t res = perft(&brd, 6);
 
    CLOCK_END();
+   printf("nps: %.9f\n", (double)ans / TIME_TAKEN);
    // printf("%zu\n", res);
-   TEST_ASSERT_EQUAL(119'060'324, res);
+   TEST_ASSERT_EQUAL(ans, res);
 }
 
 void test_perft7() {
+   uint64_t ans = 3'195'901'860;
    board brd = gen_start_board();
    CLOCK_START();
    uint64_t res = perft(&brd, 7);
 
    CLOCK_END();
+   printf("nps: %.9f\n", (double)ans / TIME_TAKEN);
    // printf("%zu\n", res);
-   TEST_ASSERT_EQUAL(3'195'901'860, res);
+   TEST_ASSERT_EQUAL(ans, res);
 }
 
 int run_test_movegen() {

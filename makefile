@@ -50,7 +50,7 @@ install:
 	fi
 
 perft : main
-	python perft.py --depth 3 ./target/main standard.epd 
+	python perft.py --depth 6 ./target/main standard.epd 
 # > perft_res.txt
 
 clean:

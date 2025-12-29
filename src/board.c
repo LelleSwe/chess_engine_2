@@ -197,6 +197,29 @@ void piece_from_char(piece *pc, bool *to_play, const char inp) {
    }
 }
 
+char piece_to_prom(piece pc) {
+   char promc;
+   switch (pc) {
+   case QUEEN:
+      promc = 'q';
+      break;
+   case ROOK:
+      promc = 'r';
+      break;
+   case KNIGHT:
+      promc = 'n';
+      break;
+   case BISHOP:
+      promc = 'b';
+      break;
+   default:
+      promc = '\0';
+      break;
+   }
+
+   return promc;
+}
+
 inline bitboa brd_from_pos(const char *pos) {
    int ffile = pos[0] - 'a';
    int frank = pos[1] - '1';
@@ -300,15 +323,9 @@ void flip_piece(board *brd, const piece pc, const bool to_play,
    }
 }
 
-inline void try_capture(board *brd, const bitboa place,
-                        castle_right *white_castle,
-                        castle_right *black_castle) {
+inline void try_capture(board *brd, const bitboa place) {
    if (brd->to_play) {
       if (brd->wcb_bb & place) {
-         if ((place == from_square(a1)) && (*white_castle & LONG_CASTLE))
-            *white_castle ^= LONG_CASTLE;
-         if ((place == from_square(h1)) && (*white_castle & SHORT_CASTLE))
-            *white_castle ^= SHORT_CASTLE;
 
          flip_piece(brd, get_piece(brd, place), false, place);
          // 50 move draw rule
@@ -316,10 +333,6 @@ inline void try_capture(board *brd, const bitboa place,
       }
    } else {
       if (brd->bcb_bb & place) {
-         if ((place == from_square(a8)) && (*black_castle & LONG_CASTLE))
-            *black_castle ^= LONG_CASTLE;
-         if ((place == from_square(h8)) && (*black_castle & SHORT_CASTLE))
-            *black_castle ^= SHORT_CASTLE;
 
          flip_piece(brd, get_piece(brd, place), true, place);
          // 50 move draw rule
@@ -330,7 +343,6 @@ inline void try_capture(board *brd, const bitboa place,
 
 inline bool try_castle(board *brd, const piece pc, const bitboa from,
                        const bitboa to) {
-   // printf("piece %d, from %zu, to %zu", pc, from, to);
    if (brd->to_play) {
       // short castle black
       if (((arr_get_castle_right4096(&brd->black_castle_history,
@@ -398,10 +410,9 @@ inline bool try_castle(board *brd, const piece pc, const bitboa from,
 }
 
 inline bool try_promote(board *brd, const piece promote, const bitboa from,
-                        const bitboa to, castle_right *white_castle,
-                        castle_right *black_castle) {
+                        const bitboa to) {
    if (promote != NO_PIECE) {
-      try_capture(brd, to, white_castle, black_castle);
+      try_capture(brd, to);
       flip_piece(brd, PAWN, brd->to_play, from);
       flip_piece(brd, promote, brd->to_play, to);
       return true;
@@ -458,8 +469,26 @@ void make_move(board *brd, const move mov) {
       brd->to_play = !brd->to_play;
       return;
    }
-   if (try_promote(brd, promote, from, to, &white_castle, &black_castle)) {
+   // Rook castling rights
+   if ((from | to) & from_square(h1)) {
+      white_castle &= LONG_CASTLE;
+   }
+   if ((from | to) & from_square(a1)) {
+      white_castle &= SHORT_CASTLE;
+   }
+   if ((from | to) & from_square(h8)) {
+      black_castle &= LONG_CASTLE;
+   }
+   if ((from | to) & from_square(a8)) {
+      black_castle &= SHORT_CASTLE;
+   }
+
+   if (try_promote(brd, promote, from, to)) {
       brd->to_play = !brd->to_play;
+      arr_set_castle_right4096(&brd->white_castle_history, brd->ply_count,
+                               white_castle);
+      arr_set_castle_right4096(&brd->black_castle_history, brd->ply_count,
+                               black_castle);
       return;
    }
    if (try_en_passant(brd, pc, from, to)) {
@@ -468,14 +497,13 @@ void make_move(board *brd, const move mov) {
    }
 
    // move piece
-   try_capture(brd, to, &white_castle, &black_castle);
+   try_capture(brd, to);
    flip_piece(brd, pc, brd->to_play, from);
    flip_piece(brd, pc, brd->to_play, to);
 
    // 16 to account for ranks/files
    if ((pc == PAWN) && (((int)(from_move(mov) - to_move(mov)) == -16) ||
                         (from_move(mov) - to_move(mov) == 16))) {
-      // printf("detected?\n");
       arr_set_bitboa4096(&brd->enp_history, brd->ply_count, to);
    }
 
@@ -488,29 +516,6 @@ void make_move(board *brd, const move mov) {
       }
    }
 
-   // Rook castling rights
-   if (pc == ROOK) {
-      // if white's turn
-      if (brd->to_play == false) {
-         if ((white_castle & SHORT_CASTLE) && ((from | to) & brd->wro_bb) &&
-             ((from & brd->wro_bb) == brd_from_pos("a8"))) {
-            white_castle ^= SHORT_CASTLE;
-         } else if ((white_castle & LONG_CASTLE) &&
-                    ((from | to) & brd->wro_bb) &&
-                    ((from & brd->wro_bb) == brd_from_pos("a1"))) {
-            white_castle ^= LONG_CASTLE;
-         }
-      } else {
-         if ((black_castle & SHORT_CASTLE) && ((from | to) & brd->bro_bb) &&
-             ((from & brd->bro_bb) == brd_from_pos("h8"))) {
-            black_castle ^= SHORT_CASTLE;
-         } else if ((black_castle & LONG_CASTLE) &&
-                    ((from | to) & brd->bro_bb) &&
-                    ((from & brd->bro_bb) == brd_from_pos("a8"))) {
-            black_castle ^= LONG_CASTLE;
-         }
-      }
-   }
    brd->to_play = !brd->to_play;
    arr_set_castle_right4096(&brd->white_castle_history, brd->ply_count,
                             white_castle);
@@ -580,8 +585,6 @@ bool try_undo_castle(board *brd, const bitboa from, const bitboa to,
          flip_piece(brd, KING, true, brd_from_pos("e8"));
          flip_piece(brd, ROOK, true, brd_from_pos("h8"));
          flip_piece(brd, ROOK, true, brd_from_pos("f8"));
-         // printf("varför gör du på detta viset svart kort %d %d %d\n",
-         //        mov->castle, brd->white_castle, brd->black_castle);
          return true;
       }
       // long castle black
@@ -591,8 +594,6 @@ bool try_undo_castle(board *brd, const bitboa from, const bitboa to,
          flip_piece(brd, KING, true, brd_from_pos("c8"));
          flip_piece(brd, ROOK, true, brd_from_pos("a8"));
          flip_piece(brd, ROOK, true, brd_from_pos("d8"));
-         // printf("varför gör du på detta viset svart lång %d %d %d\n",
-         //        mov->castle, brd->white_castle, brd->black_castle);
          return true;
       }
    } else {
@@ -605,9 +606,6 @@ bool try_undo_castle(board *brd, const bitboa from, const bitboa to,
          flip_piece(brd, KING, false, brd_from_pos("e1"));
          flip_piece(brd, ROOK, false, brd_from_pos("h1"));
          flip_piece(brd, ROOK, false, brd_from_pos("f1"));
-         // printf("varför gör du på detta viset vit kort %d %d %d\n",
-         // mov->castle,
-         //        brd->white_castle, brd->black_castle);
          return true;
       }
       // long castle white
@@ -617,9 +615,6 @@ bool try_undo_castle(board *brd, const bitboa from, const bitboa to,
          flip_piece(brd, KING, false, brd_from_pos("c1"));
          flip_piece(brd, ROOK, false, brd_from_pos("a1"));
          flip_piece(brd, ROOK, false, brd_from_pos("d1"));
-         // printf("varför gör du på detta viset vit lång %d %d %d\n",
-         // mov->castle,
-         //        brd->white_castle, brd->black_castle);
          return true;
       }
    }
@@ -725,11 +720,8 @@ move from_long_alg_single(const char *single_fen) {
    return move_fromp(from, to, promotion);
 }
 
-// #include "debug_io.h"
-
+// only makes moves
 void from_long_algebraic(const char *alg_string, board *brd) {
-   *brd = gen_start_board();
-
    int idx = 0;
    int len = strlen(alg_string);
    while (idx < len) {
@@ -743,15 +735,10 @@ void from_long_algebraic(const char *alg_string, board *brd) {
          alg_move[4] = alg_string[idx + 4];
          idx++;
       }
-      // printf("\"%s\"\n", alg_move);
       idx += 5;
       move mov = from_long_alg_single(alg_move);
 
-      // print_move(&to_make);
-      // printf("%d ", get_piece(_board, to_make.from));
       make_move(brd, mov);
-      // printf("%d\n", get_piece(_board, to_make.to));
-      // print_board(_board);
    }
 }
 
@@ -763,7 +750,6 @@ void from_fen(const char *alg_string, board *brd) {
 
    int idx = -1;
    // ranks
-   // printf("%s\n", alg_string + idx + 1);
    for (int rank = 0; rank < 8; rank++) {
       int file = 0;
       for (; file < 8; file++) {
@@ -780,11 +766,8 @@ void from_fen(const char *alg_string, board *brd) {
          piece_from_char(&pc, &to_play, alg_string[idx]);
          bitboa place = from_square(8 * (7 - rank) + file);
          flip_piece(brd, pc, to_play, place);
-         // printf("square = %d\n", 8 * rank + file);
       }
       idx += 1;
-      // printf("file = %d\n", file);
-      // printf("%s\n\n\n", alg_string + idx);
    }
    idx++;
 
@@ -792,8 +775,6 @@ void from_fen(const char *alg_string, board *brd) {
    bool to_play = alg_string[idx] == 'b';
    assert((alg_string[idx] == 'b') || (alg_string[idx] == 'w'));
    brd->to_play = to_play;
-   // printf("%c\n", alg_string[idx]);
-   // printf("%s\n", alg_string + idx);
 
    // castling rights
    idx += 1;
@@ -824,17 +805,13 @@ void from_fen(const char *alg_string, board *brd) {
          break;
       }
    }
-   // printf("white_castle = %d\n", white_castle);
-   // printf("black_castle = %d\n", black_castle);
    idx++;
    arr_set_castle_right4096(&brd->white_castle_history, brd->ply_count,
                             white_castle);
    arr_set_castle_right4096(&brd->black_castle_history, brd->ply_count,
                             black_castle);
 
-   // printf("%s\n", alg_string + idx);
    // is any square en passantable?
-   // printf("%d %d\n", white_castle, black_castle);
    if (alg_string[idx] != '-') {
       int file = alg_string[idx] - 'a';
       int rank = alg_string[idx + 1] - '1';
@@ -854,10 +831,8 @@ void from_fen(const char *alg_string, board *brd) {
       idx += 3;
 
       arr_set_bitboa4096(&brd->enp_history, brd->ply_count, from_square(squar));
-      // printf("en passant %d\n", square);
    } else {
       idx += 2;
-      // printf("no passant\n");
    }
 
    // how many plies have passed since last pawn/capture move?
@@ -876,9 +851,6 @@ void from_fen(const char *alg_string, board *brd) {
    int half_moves = atoi(half_move);
    arr_set_int4096(&brd->move50count, brd->ply_count, half_moves);
 
-   // printf("50-moves: %d\n", half_moves);
-   // printf("%s\n", alg_string + idx);
-
    // what move is it?
    // this is approx ply_count * 2
    // I guess I'm just not going to use this?
@@ -892,7 +864,23 @@ void from_fen(const char *alg_string, board *brd) {
    }
 
    int moves = atoi(movesc);
-   // printf("moves %d\n", moves);
-   // printf("movesc? %s\n", movesc);
-   // printf("%s\n", alg_string + idx);
+}
+
+void format_move(char *out, const move mov) {
+   square from = from_move(mov);
+   square to = to_move(mov);
+   piece promote = promotion_move(mov);
+
+   char ffile = (from % 8) + 'a';
+   char frank = (from / 8) + '1';
+
+   char tfile = (to % 8) + 'a';
+   char trank = (to / 8) + '1';
+   char prom = piece_to_prom(promote);
+
+   out[0] = ffile;
+   out[1] = frank;
+   out[2] = tfile;
+   out[3] = trank;
+   out[4] = prom;
 }

@@ -24,8 +24,8 @@ DECLARE_ARR(move, 256)
 bitboa hyperbola_quintessence(const bitboa occupancy, const square sq,
                               const bitboa mask);
 // only checks for if king is in check
-// bool is_legal(board *brd);
-bool in_check(board *brd, bool to_play);
+// (includes violation of castling)
+bool prev_wasnt_legal(board *brd, bool to_play);
 bitboa get_attack_bb(board *brd);
 void get_pseudolegal_moves(board *brd, arr_move256 *move_list);
 void get_legal_moves(board *brd, arr_move256 *move_list);
@@ -64,6 +64,7 @@ bitboa shift_down(bitboa inp);
 square bitscan_msb(bitboa inp);
 square bitscan_lsb(bitboa inp);
 bitboa bswap(bitboa inp);
+uint32_t bit_count(bitboa inp);
 
 // pawn moves, idk
 bitboa wget_pawn_push1(board *brd);
@@ -83,3 +84,16 @@ bitboa bpromotion(bitboa bpa_bb, bitboa wcb_bb, bitboa bcb_bb);
 void add_pawn_moves(board *brd, arr_move256 *move_list);
 
 bitboa get_hypquin_rank(bitboa occ, square pc);
+
+#define BEGIN_FOREACH_MOVE(mov)                                                \
+   arr_move256 move_list = new_arr_move256();                                  \
+   get_pseudolegal_moves(brd, &move_list);                                     \
+   for (uint32_t i = 0; i < move_list.size; i++) {                             \
+      move mov = arr_get_move256(&move_list, i);                               \
+      make_move(brd, mov);                                                     \
+      if (!prev_wasnt_legal(brd, !brd->to_play)) {
+
+#define END_FOREACH_MOVE()                                                     \
+   }                                                                           \
+   undo_move(brd, mov);                                                        \
+   }\

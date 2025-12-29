@@ -162,7 +162,25 @@ void print_move_short(FILE *f, const move mov, const uint64_t perft_count) {
    tos[0] = 'a' + tfile;
    tos[1] = '1' + trank;
 
-   char promc = prom == NO_PIECE ? '\0' : 'Q';
+   char promc;
+   switch (prom) {
+   case QUEEN:
+      promc = 'q';
+      break;
+   case ROOK:
+      promc = 'r';
+      break;
+   case KNIGHT:
+      promc = 'n';
+      break;
+   case BISHOP:
+      promc = 'b';
+      break;
+   default:
+      promc = '\0';
+      break;
+   }
+
    fprintf(f, "%s%s", froms, tos);
    if (promc != '\0') {
       fprintf(f, "%c", promc);
@@ -214,6 +232,14 @@ void print_board_internal(const board *brd) {
           brd->white_castle_history.size, brd->black_castle_history.size,
           brd->enp_history.size, brd->move_history.size,
           brd->capture_history.size);
+   printf("black castle latest: %d\n",
+          *arr_last_castle_right4096(&brd->black_castle_history));
+   printf("white castle latest: %d\n",
+          *arr_last_castle_right4096(&brd->black_castle_history));
+   printf("move_history latest: %d\n", *arr_last_move4096(&brd->move_history));
+   printf("enp_history latest: %zu\n", *arr_last_bitboa4096(&brd->enp_history));
+   printf("capture_history latest: %u\n",
+          *arr_last_piece4096(&brd->capture_history));
 }
 
 #include <string.h>
@@ -229,8 +255,8 @@ void print_move_history(const board *brd) {
       print_board(&new);
       printf("Attacking bitboard: \n");
       print_bitboard(get_attack_bb(&new));
-      printf("White in check? %b\n", in_check(&new, false));
-      printf("Black in check? %b\n", in_check(&new, true));
+      printf("White in check? %b\n", prev_wasnt_legal(&new, false));
+      printf("Black in check? %b\n", prev_wasnt_legal(&new, true));
       // print_move(mov);
       make_move(&new, mov);
    }

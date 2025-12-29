@@ -288,7 +288,7 @@ void test_en_passant() {
 void test_from_algebraic() {
    char input_str[] = "e2e4 d7d5 e4d5 g8f6 d1f3 c7c5 d5c6 d8b6 c6c7 c8d7 c7b8r "
                       "b6d8 f1e2 h7h5 g1h3 h5h4 e1g1\0";
-   board brd;
+   board brd = gen_start_board();
    from_long_algebraic(input_str, &brd);
 
    board expect = gen_start_board();
@@ -308,7 +308,7 @@ void test_from_algebraic() {
 void test_undo_moves() {
    char input_str[] = "e2e4 d7d5 e4d5 g8f6 d1f3 c7c5 d5c6 d8b6 c6c7 c8d7 c7b8r "
                       "b6d8 f1e2 h7h5 g1h3 h5h4 e1g1\0";
-   board brd;
+   board brd = gen_start_board();
    from_long_algebraic(input_str, &brd);
 
    board expect = gen_start_board();

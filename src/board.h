@@ -222,6 +222,8 @@ square to_move(const move mov);
 piece promotion_move(const move mov);
 move move_fromp(const square from, const square to, const piece promote);
 move move_from(const square from, const square to);
+void format_move(char *out, const move mov);
+char piece_to_prom(piece pc);
 
 bool board_cmp_bb(const board *a, const board *b);
 bool board_cmp_hist(const board *a, const board *b);
@@ -232,10 +234,8 @@ void flip_piece(board *brd, const piece pc, const bool to_play,
                 const bitboa place);
 bool try_castle(board *brd, const piece pc, const bitboa from, const bitboa to);
 bool try_promote(board *brd, const piece promote, const bitboa from,
-                 const bitboa to, castle_right *white_castle,
-                 castle_right *black_castle);
-void try_capture(board *brd, const bitboa place, castle_right *white_castle,
-                 castle_right *black_castle);
+                 const bitboa to);
+void try_capture(board *brd, const bitboa place);
 bool try_en_passant(board *brd, const piece pc, const bitboa from,
                     const bitboa to);
 void make_move(board *brd, const move mov);
