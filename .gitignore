@@ -1,2 +1,6 @@
 target/*
 fastchess
+standard.epd
+perft.py
+www.txt
+perft_res.txt

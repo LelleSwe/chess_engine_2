@@ -1,4 +1,5 @@
 #include "board.h"
+#include "debug_io.h"
 #include <assert.h>
 #include <ctype.h>
 #include <stdio.h>
@@ -94,6 +95,51 @@ inline bool board_cmp_bb(const board *a, const board *b) {
           (a->bkn_bb == b->bkn_bb) && (a->bcb_bb == b->bcb_bb);
 }
 
+inline bool board_cmp_hist(const board *a, const board *b) {
+   bool sizes =
+       (a->black_castle_history.size == b->black_castle_history.size) &&
+       (a->white_castle_history.size == b->white_castle_history.size) &&
+       (a->move_history.size == b->move_history.size) &&
+       (a->ply_count == b->ply_count) &&
+       (a->enp_history.size == b->enp_history.size) &&
+       (a->to_play == b->to_play) &&
+       (a->capture_history.size == b->capture_history.size) &&
+       (a->move50count.size == b->move50count.size) &&
+       (a->move_history.size == b->move_history.size);
+
+   if (!sizes)
+      return false;
+
+   for (uint32_t i = a->black_castle_history.size;
+        i < a->black_castle_history.size; i++) {
+      if (!(arr_get_castle_right4096(&a->black_castle_history, i) !=
+            (arr_get_castle_right4096(&b->black_castle_history, i)))) {
+         return false;
+      }
+      if (!(arr_get_castle_right4096(&a->white_castle_history, i) !=
+            (arr_get_castle_right4096(&b->white_castle_history, i)))) {
+         return false;
+      }
+      if (!(arr_get_bitboa4096(&a->enp_history, i) !=
+            (arr_get_bitboa4096(&b->enp_history, i)))) {
+         return false;
+      }
+      if (!(arr_get_move4096(&a->move_history, i) !=
+            (arr_get_move4096(&b->move_history, i)))) {
+         return false;
+      }
+      if (!(arr_get_int4096(&a->move50count, i) !=
+            (arr_get_int4096(&b->move50count, i)))) {
+         return false;
+      }
+      if (!(arr_get_piece4096(&a->capture_history, i) !=
+            (arr_get_piece4096(&b->capture_history, i)))) {
+         return false;
+      }
+   }
+   return true;
+}
+
 void piece_from_char(piece *pc, bool *to_play, const char inp) {
    switch (inp) {
    case 'p':
@@ -170,22 +216,23 @@ inline bitboa comb_from_comp(const board *brd, bool to_play) {
    return ret;
 }
 
-square from_move(const move mov) { return mov & 0b111111; }
-square to_move(const move mov) { return (mov >> 6) & 0b111111; }
-piece promotion_move(const move mov) { return (mov >> 12) & 0b111; }
-move move_from(const square from, const square to) { return from | (to << 6); }
-move move_fromp(const square from, const square to, const piece promote) {
+inline square from_move(const move mov) { return mov & 0b111111; }
+inline square to_move(const move mov) { return (mov >> 6) & 0b111111; }
+inline piece promotion_move(const move mov) { return (mov >> 12) & 0b111; }
+inline move move_from(const square from, const square to) {
+   return from | (to << 6);
+}
+inline move move_fromp(const square from, const square to,
+                       const piece promote) {
    return from | (to << 6) | (promote << 12);
 }
-bitboa from_square(square sq) {
-   bitboa file = sq % 8;
-   bitboa rank = sq / 8;
-   bitboa brd = (1UL << file) * (1UL << (rank * 8UL));
-   return brd;
-}
+inline bitboa from_square(square sq) { return (1ULL << sq); }
 
+// hopefully this compiles to something nice :P
 void flip_piece(board *brd, const piece pc, const bool to_play,
                 const bitboa place) {
+   static bool seen_flip_error = false;
+
    // to_play = false for white's turn
    if (!to_play) {
       brd->wcb_bb ^= place;
@@ -211,6 +258,10 @@ void flip_piece(board *brd, const piece pc, const bool to_play,
       case NO_PIECE:
          // Something has gone very wrong
          puts("ERROR: Attempted to flip non-existant piece for white.");
+         if (!seen_flip_error) {
+            seen_flip_error = true;
+            print_move_history(brd);
+         }
          exit(EXIT_FAILURE);
          break;
       }
@@ -237,22 +288,39 @@ void flip_piece(board *brd, const piece pc, const bool to_play,
          break;
       case NO_PIECE:
          // Something has gone very wrong
+
          puts("ERROR: Attempted to flip non-existant piece for black.");
+         if (!seen_flip_error) {
+            seen_flip_error = true;
+            print_move_history(brd);
+         }
          exit(EXIT_FAILURE);
          break;
       }
    }
 }
 
-inline void try_capture(board *brd, const bitboa place) {
+inline void try_capture(board *brd, const bitboa place,
+                        castle_right *white_castle,
+                        castle_right *black_castle) {
    if (brd->to_play) {
       if (brd->wcb_bb & place) {
+         if ((place == from_square(a1)) && (*white_castle & LONG_CASTLE))
+            *white_castle ^= LONG_CASTLE;
+         if ((place == from_square(h1)) && (*white_castle & SHORT_CASTLE))
+            *white_castle ^= SHORT_CASTLE;
+
          flip_piece(brd, get_piece(brd, place), false, place);
          // 50 move draw rule
          arr_set_int4096(&brd->move50count, brd->ply_count, 0);
       }
    } else {
       if (brd->bcb_bb & place) {
+         if ((place == from_square(a8)) && (*black_castle & LONG_CASTLE))
+            *black_castle ^= LONG_CASTLE;
+         if ((place == from_square(h8)) && (*black_castle & SHORT_CASTLE))
+            *black_castle ^= SHORT_CASTLE;
+
          flip_piece(brd, get_piece(brd, place), true, place);
          // 50 move draw rule
          arr_set_int4096(&brd->move50count, brd->ply_count, 0);
@@ -330,9 +398,10 @@ inline bool try_castle(board *brd, const piece pc, const bitboa from,
 }
 
 inline bool try_promote(board *brd, const piece promote, const bitboa from,
-                        const bitboa to) {
+                        const bitboa to, castle_right *white_castle,
+                        castle_right *black_castle) {
    if (promote != NO_PIECE) {
-      try_capture(brd, to);
+      try_capture(brd, to, white_castle, black_castle);
       flip_piece(brd, PAWN, brd->to_play, from);
       flip_piece(brd, promote, brd->to_play, to);
       return true;
@@ -389,7 +458,7 @@ void make_move(board *brd, const move mov) {
       brd->to_play = !brd->to_play;
       return;
    }
-   if (try_promote(brd, promote, from, to)) {
+   if (try_promote(brd, promote, from, to, &white_castle, &black_castle)) {
       brd->to_play = !brd->to_play;
       return;
    }
@@ -399,7 +468,7 @@ void make_move(board *brd, const move mov) {
    }
 
    // move piece
-   try_capture(brd, to);
+   try_capture(brd, to, &white_castle, &black_castle);
    flip_piece(brd, pc, brd->to_play, from);
    flip_piece(brd, pc, brd->to_play, to);
 
@@ -767,11 +836,21 @@ void from_fen(const char *alg_string, board *brd) {
    // is any square en passantable?
    // printf("%d %d\n", white_castle, black_castle);
    if (alg_string[idx] != '-') {
-      int rank = alg_string[idx] - 'a';
-      int file = alg_string[idx + 1] - '1';
+      int file = alg_string[idx] - 'a';
+      int rank = alg_string[idx + 1] - '1';
       assert(0 <= rank && rank < 8);
       assert(0 <= file && file < 8);
-      int squar = rank * 8 + file;
+
+      // the enp square points to 1 behind where it goes
+      // so we compensate by adding one
+      // (instead of subtracting because it's
+      // previous player's passant)
+      int squar;
+      if (to_play) {
+         squar = (rank + 1) * 8 + file;
+      } else {
+         squar = (rank - 1) * 8 + file;
+      }
       idx += 3;
 
       arr_set_bitboa4096(&brd->enp_history, brd->ply_count, from_square(squar));

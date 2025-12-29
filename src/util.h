@@ -16,8 +16,8 @@
    void arr_push_##type##max(arr_##type##max *arr, const type elem);           \
    type arr_pop_##type##max(arr_##type##max *arr);                             \
    void arr_drop_##type##max(arr_##type##max *arr);                            \
-   type *arr_last_##type##max(arr_##type##max *arr);                           \
-   type arr_get_##type##max(arr_##type##max *arr, const size_t idx);           \
+   type *arr_last_##type##max(const arr_##type##max *arr);                     \
+   type arr_get_##type##max(const arr_##type##max *arr, const size_t idx);     \
    void arr_set_##type##max(arr_##type##max *arr, const size_t idx,            \
                             const type elem);
 
@@ -62,7 +62,7 @@
       (arr->size)--;                                                           \
    }                                                                           \
                                                                                \
-   inline type *arr_last_##type##max(arr_##type##max *arr) {                   \
+   inline type *arr_last_##type##max(const arr_##type##max *arr) {             \
       if (!arr_unsafe_ops && (arr->size == 0)) {                               \
          printf("ERROR: array of type %s with capacity %zu tried to peek last" \
                 "when empty! File %s and line %d.\n",                          \
@@ -73,7 +73,8 @@
       return elem;                                                             \
    }                                                                           \
                                                                                \
-   inline type arr_get_##type##max(arr_##type##max *arr, const size_t idx) {   \
+   inline type arr_get_##type##max(const arr_##type##max *arr,                 \
+                                   const size_t idx) {                         \
       if (!arr_unsafe_ops && (idx >= (arr->size))) {                           \
          printf("ERROR: array of type %s with size %zu tried to get at "       \
                 "index %zu. File %s and line %d.\n",                           \
@@ -96,3 +97,16 @@
    }
 
 #endif
+
+#include <time.h>
+#define CLOCK_START()                                                          \
+   struct timespec START_TIME_dorigh, END_TIME_dorigh;                         \
+                                                                               \
+   timespec_get(&START_TIME_dorigh, TIME_UTC)
+
+#define CLOCK_END()                                                            \
+   timespec_get(&END_TIME_dorigh, TIME_UTC);                                   \
+   double TIME_TAKEN =                                                         \
+       (END_TIME_dorigh.tv_sec - START_TIME_dorigh.tv_sec) +                   \
+       (END_TIME_dorigh.tv_nsec - START_TIME_dorigh.tv_nsec) / 1e9;            \
+   printf("Time taken for %s: %.9f seconds\n", __func__, TIME_TAKEN)\

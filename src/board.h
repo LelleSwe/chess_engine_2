@@ -38,6 +38,111 @@ typedef enum {
    a8, b8, c8, d8, e8, f8, g8, h8,
 } square;
 
+typedef enum : bitboa {
+   rank1 = 0x00000000000000FFULL,
+   rank2 = 0x000000000000FF00ULL,
+   rank3 = 0x0000000000FF0000ULL,
+   rank4 = 0x00000000FF000000ULL,
+   rank5 = 0x000000FF00000000ULL,
+   rank6 = 0x0000FF0000000000ULL,
+   rank7 = 0x00FF000000000000ULL,
+   rank8 = 0xFF00000000000000ULL,
+} ranks;
+
+typedef enum : bitboa {
+   file1 = 0x0101010101010101ULL,
+   file2 = 0x0202020202020202ULL,
+   file3 = 0x0404040404040404ULL,
+   file4 = 0x0808080808080808ULL,
+   file5 = 0x1010101010101010ULL,
+   file6 = 0x2020202020202020ULL,
+   file7 = 0x4040404040404040ULL,
+   file8 = 0x8080808080808080ULL,
+} files;
+
+constexpr bitboa files_arr[8] = {
+   0x0101010101010101ULL,
+   0x0202020202020202ULL,
+   0x0404040404040404ULL,
+   0x0808080808080808ULL,
+   0x1010101010101010ULL,
+   0x2020202020202020ULL,
+   0x4040404040404040ULL,
+   0x8080808080808080ULL,
+};
+
+// top left to bottom right
+typedef enum : bitboa {
+   diag1  = 0x0100000000000000ULL,
+   diag2  = 0x0201000000000000ULL,
+   diag3  = 0x0402010000000000ULL,
+   diag4  = 0x0804020100000000ULL,
+   diag5  = 0x1008040201000000ULL,
+   diag6  = 0x2010080402010000ULL,
+   diag7  = 0x4020100804020100ULL,
+   diag8  = 0x8040201008040201ULL,
+   diag9  = 0x0080402010080402ULL,
+   diag10 = 0x0000804020100804ULL,
+   diag11 = 0x0000008040201008ULL,
+   diag12 = 0x0000000080402010ULL,
+   diag13 = 0x0000000000804020ULL,
+   diag14 = 0x0000000000008040ULL,
+   diag15 = 0x0000000000000080ULL,
+} diagonals;
+constexpr bitboa diagonals_arr[15] = {
+   0x0100000000000000ULL,
+   0x0201000000000000ULL,
+   0x0402010000000000ULL,
+   0x0804020100000000ULL,
+   0x1008040201000000ULL,
+   0x2010080402010000ULL,
+   0x4020100804020100ULL,
+   0x8040201008040201ULL,
+   0x0080402010080402ULL,
+   0x0000804020100804ULL,
+   0x0000008040201008ULL,
+   0x0000000080402010ULL,
+   0x0000000000804020ULL,
+   0x0000000000008040ULL,
+   0x0000000000000080ULL,
+};
+
+// bottom left to bottom right
+typedef enum : bitboa {
+   adiag1  = 0x0000000000000001ULL,
+   adiag2  = 0x0000000000000102ULL,
+   adiag3  = 0x0000000000010204ULL,
+   adiag4  = 0x0000000001020408ULL,
+   adiag5  = 0x0000000102040810ULL,
+   adiag6  = 0x0000010204081020ULL,
+   adiag7  = 0x0001020408102040ULL,
+   adiag8  = 0x0102040810204080ULL,
+   adiag9  = 0x0204081020408000ULL,
+   adiag10 = 0x0408102040800000ULL,
+   adiag11 = 0x0810204080000000ULL,
+   adiag12 = 0x1020408000000000ULL,
+   adiag13 = 0x2040800000000000ULL,
+   adiag14 = 0x4080000000000000ULL,
+   adiag15 = 0x8000000000000000ULL,
+} anti_diagonals;
+constexpr bitboa anti_diagonals_arr[15] = {
+   0x0000000000000001ULL,
+   0x0000000000000102ULL,
+   0x0000000000010204ULL,
+   0x0000000001020408ULL,
+   0x0000000102040810ULL,
+   0x0000010204081020ULL,
+   0x0001020408102040ULL,
+   0x0102040810204080ULL,
+   0x0204081020408000ULL,
+   0x0408102040800000ULL,
+   0x0810204080000000ULL,
+   0x1020408000000000ULL,
+   0x2040800000000000ULL,
+   0x4080000000000000ULL,
+   0x8000000000000000ULL,
+};
+
 // clang-format on
 
 /*
@@ -119,14 +224,18 @@ move move_fromp(const square from, const square to, const piece promote);
 move move_from(const square from, const square to);
 
 bool board_cmp_bb(const board *a, const board *b);
+bool board_cmp_hist(const board *a, const board *b);
 // the following are internal functions, not to be used.
 piece get_piece(const board *brd, const bitboa position);
+
 void flip_piece(board *brd, const piece pc, const bool to_play,
                 const bitboa place);
 bool try_castle(board *brd, const piece pc, const bitboa from, const bitboa to);
 bool try_promote(board *brd, const piece promote, const bitboa from,
-                 const bitboa to);
-void try_capture(board *brd, const bitboa place);
+                 const bitboa to, castle_right *white_castle,
+                 castle_right *black_castle);
+void try_capture(board *brd, const bitboa place, castle_right *white_castle,
+                 castle_right *black_castle);
 bool try_en_passant(board *brd, const piece pc, const bitboa from,
                     const bitboa to);
 void make_move(board *brd, const move mov);

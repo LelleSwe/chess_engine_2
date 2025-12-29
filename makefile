@@ -4,7 +4,7 @@ SRC = $(wildcard src/*.c) $(wildcard src/*.h)
 TEST = $(wildcard test/*.c) $(wildcard test/*.h)
 LIB = $(wildcard lib/*.c) $(wildcard lib/*.h)
 
-.PHONY: all main test test_uci clean install
+.PHONY: all main test test_uci clean install perft
 
 EXEC_OUT = target/main
 TEST_OUT = target/test
@@ -18,6 +18,7 @@ main: $(SRC)
 test: $(SRC) $(TEST) main
 	$(MAKE) unit
 	$(MAKE) uci
+	$(MAKE) perft
 
 unit: $(SRC) $(TEST)
 	$(CC) $(LIB) $(SRC) $(TEST) $(CFLAGS) test.c -o $(TEST_OUT)
@@ -41,6 +42,16 @@ install:
 		wget https://raw.githubusercontent.com/ThrowTheSwitch/Unity/refs/heads/master/src/unity_internals.h; \
 		cd ..; \
 	fi
+	if [ ! -e "standard.epd" ]; then \
+		wget https://raw.githubusercontent.com/AndyGrant/Ethereal/refs/heads/master/src/perft/standard.epd; \
+	fi
+	if [ ! -e "perft.py" ]; then \
+		wget https://raw.githubusercontent.com/AndyGrant/Ethereal/refs/heads/master/src/perft/perft.py; \
+	fi
+
+perft : main
+	python perft.py --depth 3 ./target/main standard.epd 
+# > perft_res.txt
 
 clean:
 	rm -f target/*
