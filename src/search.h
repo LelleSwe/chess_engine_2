@@ -16,4 +16,4 @@ typedef struct {
 #endif
 
 search_res search(board *brd);
-int negamax(board *brd, int depth);
+int negamax_alphabeta(board *brd, int alpha, int beta, int depth);

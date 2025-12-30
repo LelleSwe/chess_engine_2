@@ -3,7 +3,7 @@
 
 // static uint64_t nodes = 0;
 
-int negamax(board *brd, int depth) {
+int negamax_alphabeta(board *brd, int alpha, int beta, int depth) {
    // nodes++;
    if (depth == 0) {
       return eval(brd);
@@ -11,9 +11,17 @@ int negamax(board *brd, int depth) {
 
    int max = INT32_MIN;
    BEGIN_FOREACH_MOVE(mov)
-   int score = -negamax(brd, depth - 1);
-   if (score > max)
+   int score = -negamax_alphabeta(brd, -beta, -alpha, depth - 1);
+
+   if (score > max) {
       max = score;
+      if (score > alpha)
+         alpha = score;
+      if (score >= beta) {
+         undo_move(brd, mov);
+         return max;
+      }
+   }
 
    END_FOREACH_MOVE()
 
@@ -26,7 +34,7 @@ search_res search(board *brd) {
 
    // CLOCK_START();
    BEGIN_FOREACH_MOVE(mov)
-   int score = -negamax(brd, 5);
+   int score = -negamax_alphabeta(brd, INT32_MIN, INT32_MAX, 5);
    if (score > best_score) {
       best_score = score;
       best_move = mov;
