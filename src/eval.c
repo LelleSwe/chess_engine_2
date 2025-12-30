@@ -5,11 +5,11 @@
 int material_eval(board *brd) {
    int white =
        bit_count(brd->wpa_bb) * PAWN_VAL + bit_count(brd->wkn_bb) * KNIGHT_VAL +
-       bit_count(brd->wbi_bb) * BISHOP_VAL + bit_count(brd->wki_bb) * KING_VAL +
+       bit_count(brd->wbi_bb) * BISHOP_VAL +
        bit_count(brd->wqu_bb) * QUEEN_VAL + bit_count(brd->wro_bb) * ROOK_VAL;
    int black =
        bit_count(brd->bpa_bb) * PAWN_VAL + bit_count(brd->bkn_bb) * KNIGHT_VAL +
-       bit_count(brd->bbi_bb) * BISHOP_VAL + bit_count(brd->bki_bb) * KING_VAL +
+       bit_count(brd->bbi_bb) * BISHOP_VAL +
        bit_count(brd->bqu_bb) * QUEEN_VAL + bit_count(brd->bro_bb) * ROOK_VAL;
 
    return white - black;
@@ -76,7 +76,7 @@ int pesto_eval(board *brd, int material) {
                    2 * QUEEN_VAL + 4 * KNIGHT_VAL;
    int score_w = material * mg[0] + (total_mat - material) * eg[0];
    int score_b = material * mg[1] + (total_mat - material) * eg[1];
-   return (score_w - score_b) / 24;
+   return (score_w - score_b) / (24 * PAWN_VAL);
 }
 #undef GET_PIECES
 #undef LOOP_PESTO

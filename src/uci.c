@@ -8,6 +8,8 @@
 #include <unistd.h>
 
 void uci(board *brd) {
+   setvbuf(stdin, nullptr, _IONBF, 0);
+   setvbuf(stdout, nullptr, _IONBF, 0);
    // FILE *debugout = fopen("www.txt", "w");
    char buffer[0x1000] = "";
    search_res result;
@@ -85,6 +87,7 @@ void uci(board *brd) {
          result = search(brd);
          char out[6] = "";
          format_move(out, result.mov);
+         // print_res(&result);
          printf("bestmove %s\n", out);
       }
 
@@ -93,7 +96,7 @@ void uci(board *brd) {
       }
 
       if (strncmp(buffer, "info", strlen("info\0")) == 0) {
-         printf("info score %d depth %d", result.score, result.depth);
+         printf("info score %d depth %d\n", result.score, result.depth);
       }
 
       if (strncmp(buffer, "playself", strlen("playself\n")) == 0) {

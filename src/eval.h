@@ -11,7 +11,6 @@ enum materials {
    BISHOP_VAL = 300,
    ROOK_VAL = 500,
    QUEEN_VAL = 900,
-   KING_VAL = 100'000
 };
 
 #endif
