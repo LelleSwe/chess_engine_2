@@ -16,4 +16,6 @@ enum materials {
 
 #endif
 
-uint32_t eval(board *brd);
+int eval(board *brd);
+int material_eval(board *brd);
+int pesto_eval(board *brd, int material);

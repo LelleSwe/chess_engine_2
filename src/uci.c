@@ -63,6 +63,10 @@ void uci(board *brd) {
          from_long_algebraic(offset, brd);
       }
 
+      if (strncmp(buffer, "makebest", strlen("makebest\0")) == 0) {
+         make_move(brd, result.mov);
+      }
+
       if (strncmp(buffer, "perft", strlen("perft\0")) == 0) {
          char *offset = buffer + strlen("perft \0");
          int depth = atoi(offset);
@@ -84,6 +88,19 @@ void uci(board *brd) {
 
       if (strncmp(buffer, "info", strlen("info\0")) == 0) {
          printf("info score %d depth %d", result.score, result.depth);
+      }
+
+      if (strncmp(buffer, "playself", strlen("playself\n")) == 0) {
+         result.mov = 1;
+         char out[6] = "";
+         while (result.mov != 0) {
+            result = search(brd);
+            format_move(out, result.mov);
+
+            printf("%s ", out);
+            fflush(stdout);
+            make_move(brd, result.mov);
+         };
       }
 
       // fflush(debugout);

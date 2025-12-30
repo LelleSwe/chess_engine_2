@@ -48,6 +48,11 @@ install:
 	if [ ! -e "perft.py" ]; then \
 		wget https://raw.githubusercontent.com/AndyGrant/Ethereal/refs/heads/master/src/perft/perft.py; \
 	fi
+	if [ ! -e "./lib/raygui.h" ]; then \
+		cd lib; \
+		wget https://raw.githubusercontent.com/raysan5/raygui/0b94b80c92c34c79f8d902f51f68dfc1edacf51b/src/raygui.h; \
+		cd ..; \
+	fi
 
 perft : main
 	python perft.py --depth 6 ./target/main standard.epd 
