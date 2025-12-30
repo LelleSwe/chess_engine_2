@@ -212,7 +212,7 @@ board gen_start_board();
 board gen_empty_board();
 // UCI compliant version
 void from_long_algebraic(const char *alg_string, board *brd);
-void from_fen(const char *alg_string, board *brd);
+int from_fen(const char *alg_string, board *brd);
 move from_long_alg_single(const char *single_fen);
 bitboa brd_from_pos(const char *pos);
 bitboa comb_from_comp(const board *brd, bool to_play);

@@ -50,11 +50,17 @@ void uci(board *brd) {
          char *offset = buffer + strlen("position \0");
 
          if (strncmp(offset, "startpos", strlen("startpos\0")) == 0) {
+            offset += strlen("startpos \0");
             *brd = gen_start_board();
-
-         } else if (strncmp(offset, "fen", strlen("fen\0")) == 0) {
+         }
+         if (strncmp(offset, "fen", strlen("fen\0")) == 0) {
             offset += strlen("fen \0");
-            from_fen(offset, brd);
+            offset += from_fen(offset, brd);
+            offset++;
+         }
+         if (strncmp(offset, "moves", strlen("moves\0")) == 0) {
+            offset += strlen("moves \0");
+            from_long_algebraic(offset, brd);
          }
       }
 

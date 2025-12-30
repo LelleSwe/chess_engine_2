@@ -745,7 +745,8 @@ void from_long_algebraic(const char *alg_string, board *brd) {
 // with how fragile this function is, the fen string _better_ be formatted
 // correctly.
 // Otherwise only God knows what will happen.
-void from_fen(const char *alg_string, board *brd) {
+// returns length of fen string
+int from_fen(const char *alg_string, board *brd) {
    *brd = gen_empty_board();
 
    int idx = -1;
@@ -857,13 +858,15 @@ void from_fen(const char *alg_string, board *brd) {
    char movesc[10] = "";
    for (int i = 0; i < 10; i++) {
       idx++;
-      if (alg_string[idx - 1] == ' ') {
+      if ((alg_string[idx - 1] == ' ') || (alg_string[idx - 1] == '\n') ||
+          (alg_string[idx - 1] == '\0')) {
          break;
       }
       movesc[i] = alg_string[idx - 1];
    }
 
    int moves = atoi(movesc);
+   return idx - 1;
 }
 
 void format_move(char *out, const move mov) {
