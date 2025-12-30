@@ -9,22 +9,22 @@ LIB = $(wildcard lib/*.c) $(wildcard lib/*.h)
 EXEC_OUT = target/main
 TEST_OUT = target/test
 
-all: install main test
+all: main
 
 main: $(SRC)
 	$(CC) $(SRC) $(CFLAGS) main.c -o $(EXEC_OUT)
 
 # -lunity -I/usr/include/unity /usr/lib/libunity.a 
-test: $(SRC) $(TEST) main
+test: install $(SRC) $(TEST) main
 	$(MAKE) unit
 	$(MAKE) uci
 	$(MAKE) perft
 
-unit: $(SRC) $(TEST)
+unit: install $(SRC) $(TEST)
 	$(CC) $(LIB) $(SRC) $(TEST) $(CFLAGS) test.c -o $(TEST_OUT)
 	./target/test
 
-uci: main
+uci: install main
 	./fastchess/fastchess --compliance ./target/main
 
 # testing tools
@@ -54,7 +54,7 @@ install:
 		cd ..; \
 	fi
 
-perft : main
+perft : install main
 	python perft.py --depth 6 ./target/main standard.epd 
 # > perft_res.txt
 
