@@ -52,7 +52,7 @@ void calc_move_time() {
 
    if (comb_time && !movetime) {
       if (movestogo > 0) {
-         search_time = comb_time / max(2, movestogo) - 50;
+         search_time = comb_time / max(2, movestogo + 1) - 250;
          if (search_time < 10)
             search_time = 10;
       } else {
@@ -83,16 +83,8 @@ void update_nps() {
    timer = cur_time;
 }
 
-int negate_score(int score) {
-   // decay the checkmate score by one ply.
-   if (score < -32000 * 4)
-      score += 4;
-
-   return -score;
-}
-
 bool node_probe() {
-   if (total_nodes % (1 << 19) == 0) {
+   if (total_nodes % (1 << 16) == 0) {
       update_nps();
       print_res(&ans);
       nodes_since_last = 0;
@@ -104,6 +96,14 @@ bool node_probe() {
       }
    }
    return false;
+}
+
+int negate_score(int score) {
+   // decay the checkmate score by one ply.
+   if (score < 4 * (CHECKMATE + 200))
+      score += 4;
+
+   return -score;
 }
 
 int force_exact(int score) { return (score + 1) & ~3; }
@@ -123,27 +123,22 @@ int negamax_alphabeta_ibv(board *brd, int alpha, int beta, int depth) {
 
       if (entry->depth >= depth) {
 
-         int score4 = entry->score & 3; // mod 4
-         if (score4 == 1 && entry->score >= beta)
-            return entry->score;
-         if (score4 == 3 && entry->score <= alpha)
-            return entry->score;
-         if (score4 == 0)
-            return entry->score;
-         // printf("info string hash %lu entry depth %d our depth %d eval mod
-         // "
+         int score4 = entry->score & 3;
+         bool is_exact = score4 == 0;
+         bool beta_cut = score4 == 1 && entry->score >= beta;
+         bool alpha_cut = score4 == 3 && entry->score <= alpha;
+         // printf("info string hash %lu entry depth %d our depth %d eval mod"
          //        "4 %d\n",
-         //        hash, entry->depth, depth, entry->score % 4);
+         //        hash, entry->depth, depth, score4);
+         if (is_exact || beta_cut || alpha_cut)
+            return entry->score;
       }
    }
 
    if (depth == 0) {
-      // 4x for ibv search
       return 4 * eval(brd);
    }
    move best_move;
-
-   int alpha_start = alpha;
    int cut = force_exact(beta);
    BEGIN_FOREACH_MOVE(mov) {
       int score =
@@ -164,22 +159,15 @@ int negamax_alphabeta_ibv(board *brd, int alpha, int beta, int depth) {
    }
    END_FOREACH_MOVE()
 
-   if (max == 4 * CHECKMATE) {
+   if (force_exact(max) == 4 * CHECKMATE) {
       // printf("yes? \n");
       max = prev_wasnt_legal(brd, !brd->to_play) ? 4 * CHECKMATE : 0;
    }
 
-   if (max <= force_exact(alpha_start)) {
-      max = force_exact(max) - 1; // high bound
-   } else if (max >= force_exact(beta)) {
-      max = force_lower(max); // lower bound
-   } else {
-      max = force_exact(max); // exact
-   }
-
-   tt_set(hash, best_move, max, depth);
+   if (do_search)
+      tt_set(hash, best_move, max, depth);
    // printf("saved hash %lu best move %d ibv score %d depth %d to tt\n", hash,
-   //        best_move, max, depth);
+   // best_move, max, depth);
    return max;
 }
 
@@ -203,7 +191,7 @@ search_res search(board *brd) {
           (timespec_to_int(&timer) - search_soft_deadline));
    while (do_search) {
       move best_move = 0;
-      int best_score = CHECKMATE;
+      int best_score = 4 * CHECKMATE;
 
       if (searchdepth >= 0 && depth > searchdepth) {
          do_search = false;
@@ -217,8 +205,7 @@ search_res search(board *brd) {
 
       BEGIN_FOREACH_MOVE(mov)
       int score = negate_score(
-          negamax_alphabeta_ibv(brd, CHECKMATE, -best_score, depth));
-      score /= 4; // ibv score
+          negamax_alphabeta_ibv(brd, 4 * CHECKMATE, -best_score, depth));
       if (score > best_score) {
          best_score = score;
          best_move = mov;
@@ -232,7 +219,7 @@ search_res search(board *brd) {
          ans.depth = depth;
          ans.nodes = total_nodes;
          ans.nps = nps;
-         ans.score = best_score;
+         ans.score = best_score / 4; // ibv score
          ans.time = (uint64_t)(time_pass(&start, &timer) * 1000);
       }
       print_res(&ans);
