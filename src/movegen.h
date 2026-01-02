@@ -26,6 +26,7 @@ bitboa hyperbola_quintessence(const bitboa occupancy, const square sq,
 // only checks for if king is in check
 // (includes violation of castling)
 bool prev_wasnt_legal(board *brd, bool to_play);
+bool in_check(board *brd, bool to_play);
 bitboa get_attack_bb(board *brd);
 void get_pseudolegal_moves(board *brd, arr_move256 *move_list);
 void get_legal_moves(board *brd, arr_move256 *move_list);

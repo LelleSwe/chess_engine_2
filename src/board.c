@@ -257,17 +257,40 @@ tt_entry t_table[t_table_len] = {};
 zobrist_lookup_t zobrist_lookup = {};
 // setup for zobrist
 // annoying that we don't have constexpr functions
-static uint64_t zrand() {
-   static uint64_t rand_state = 17729132930264548489ULL;
 
-   uint64_t a = 7767583582733577769ULL;
-   uint64_t b = 9683582967429144733ULL;
-   uint64_t n = 10495531625819030881ULL;
+/* xoshiro adapted from the code included on Sebastiano Vigna's website */
+uint64_t rol64(uint64_t x, int k) { return (x << k) | (x >> (64 - k)); }
 
-   rand_state = (rand_state * a + b) % n;
-   return rand_state;
+struct xoshiro256pp_state {
+   uint64_t s[4];
+};
+
+uint64_t xoshiro256pp(struct xoshiro256pp_state *state) {
+   uint64_t *s = state->s;
+   uint64_t const result = rol64(s[0] + s[3], 23) + s[0];
+   uint64_t const t = s[1] << 17;
+
+   s[2] ^= s[0];
+   s[3] ^= s[1];
+   s[1] ^= s[2];
+   s[0] ^= s[3];
+
+   s[2] ^= t;
+   s[3] = rol64(s[3], 45);
+
+   return result;
+}
+static zobrist zrand() {
+   static struct xoshiro256pp_state rand_state = {
+       12441619697466329327ULL, 12875712656706500467ULL,
+       13230994105241561653ULL, 16193037980951381519ULL};
+
+   uint64_t higher = xoshiro256pp(&rand_state);
+   uint64_t lower = xoshiro256pp(&rand_state);
+   return ((zobrist)higher << 64) + lower;
 }
 
+// for setting up zobrist lookup. Don't use during search.
 void setup_zobrist() {
    zobrist_lookup_t lookup = {};
    for (int i = 0; i < 2; i++) {
@@ -285,15 +308,6 @@ void setup_zobrist() {
    zobrist_lookup = lookup;
 }
 
-// for setting up zobrist lookup. Don't use during search.
-// TODO: switch to better random
-
-// clang-format off
-// idx 0 -> 767 for pieces, lookup by (1 << 767 * to_play) + (piece - 1) * square.
-// idx 768 - 775 for en passant file, lookup by 768 + (bitscan_lsb(bitboard) % 8)
-// idx 776 - 791 for castling rights, lookup by 6*64 + 8 + castle_right + 4 * (is white_castle ? 1 : 0) ??
-// idx 792 for side to move, lookup by 6*64+8+8 + to_play
-// clang-format on
 void flip_hash(board *brd, square from, square to, piece promote, piece pc,
                piece capture) {
    zobrist zobrist_state =
@@ -340,7 +354,6 @@ void flip_hash(board *brd, square from, square to, piece promote, piece pc,
    arr_set_zobrist4096(&brd->zobrist_history, brd->ply_count, zobrist_state);
 }
 
-// literally only used for en passant bruh
 // TODO: refactoring?
 inline void flip_hash_piece(board *brd, bitboa pos, bool to_play, piece pc) {
    zobrist zobrist_state =
@@ -410,11 +423,18 @@ void init_zobrist(board *brd) {
    arr_set_zobrist4096(&brd->zobrist_history, brd->ply_count, zobrist_state);
 }
 
-inline tt_entry *tt_get(zobrist hash) { return &t_table[hash % t_table_len]; }
+inline tt_entry *tt_get(zobrist hash) {
+   uint64_t lower = hash % t_table_len;
+
+   return &t_table[lower];
+}
 
 inline bool tt_exists(zobrist hash) {
-   tt_entry *ent = &t_table[hash % t_table_len];
-   if (ent->hash != hash)
+   uint64_t higher = hash >> 64;
+   uint64_t lower = hash % t_table_len;
+
+   tt_entry *ent = &t_table[lower];
+   if (ent->hash != higher)
       return false;
    if (ent->hash == 0 && ent->best_move == 0 && ent->depth == 0 &&
        ent->score == 0)
@@ -431,11 +451,13 @@ inline void tt_set(zobrist hash, move best_move, int ibv_score, int depth) {
    //    }
    // }
 
-   tt_entry entry = {.hash = hash,
+   uint64_t higher = hash >> 64;
+   uint64_t lower = hash % t_table_len;
+   tt_entry entry = {.hash = higher,
                      .best_move = best_move,
                      .score = ibv_score,
                      .depth = depth};
-   t_table[hash % t_table_len] = entry;
+   t_table[lower] = entry;
 }
 
 inline square from_move(const move mov) { return mov & 0b111111; }

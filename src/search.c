@@ -41,18 +41,18 @@ int64_t timespec_to_int(struct timespec *time) {
 }
 
 // decently ugly to just throw around statics
-void calc_move_time() {
+void calc_move_time(board *brd) {
    timespec_get(&start, TIME_UTC);
 
-   int64_t comb_time = btime | wtime;
-   int64_t comb_inc = winc | binc;
+   int64_t comb_time = brd->to_play ? btime : wtime;
+   int64_t comb_inc = brd->to_play ? binc : winc;
 
    if (!comb_time && !movetime && (searchdepth < 0))
       searchdepth = 6;
 
    if (comb_time && !movetime) {
       if (movestogo > 0) {
-         search_time = comb_time / max(2, movestogo + 1) - 250;
+         search_time = comb_time / max(2, movestogo + 1) - 50;
          if (search_time < 10)
             search_time = 10;
       } else {
@@ -68,8 +68,22 @@ void calc_move_time() {
    }
 }
 
+void format_score(char *str, int score) {
+   // dist in plies
+   int matedist = (abs(CHECKMATE) - abs(score));
+   if (score < (CHECKMATE + 200)) {
+      snprintf(str, 0x100, "mate -%d", (matedist + 1) / 2);
+   } else if (-score < (CHECKMATE + 200)) {
+      snprintf(str, 0x100, "mate %d", (matedist + 1) / 2);
+   } else {
+      snprintf(str, 0x100, "cp %d", score);
+   }
+}
+
 void print_res(search_res *res) {
-   printf("info score cp %d depth %d nps %lu nodes %lu time %lu\n", res->score,
+   char score_str[0x100];
+   format_score(score_str, res->score);
+   printf("info score %s depth %d nps %lu nodes %lu time %lu\n", score_str,
           res->depth, res->nps, res->nodes, res->time);
 }
 
@@ -79,12 +93,14 @@ void update_nps() {
    timespec_get(&cur_time, TIME_UTC);
    double taken = time_pass(&timer, &cur_time);
    nps = (uint64_t)((double)nodes_since_last / taken);
+   ans.nodes = total_nodes;
+   ans.nps = nps;
    nodes_since_last = 0;
    timer = cur_time;
 }
 
 bool node_probe() {
-   if (total_nodes % (1 << 16) == 0) {
+   if (total_nodes % (1 << 20) == 0) {
       update_nps();
       print_res(&ans);
       nodes_since_last = 0;
@@ -98,9 +114,16 @@ bool node_probe() {
    return false;
 }
 
+inline bool gets_mated_score(int score) {
+   return score < 4 * (CHECKMATE + 200);
+}
+inline bool is_mating_score(int score) {
+   return score > -4 * (CHECKMATE + 200);
+}
+
 int negate_score(int score) {
    // decay the checkmate score by one ply.
-   if (score < 4 * (CHECKMATE + 200))
+   if (gets_mated_score(score))
       score += 4;
 
    return -score;
@@ -110,7 +133,7 @@ int force_exact(int score) { return (score + 1) & ~3; }
 int force_lower(int score) { return force_exact(score) + 1; }
 
 int negamax_alphabeta_ibv(board *brd, int alpha, int beta, int depth) {
-   int max = CHECKMATE * 4; // -100'000
+   int max = CHECKMATE * 4; // -100'000 * 4
 
    if (!do_search || node_probe())
       return force_lower(alpha);
@@ -161,7 +184,7 @@ int negamax_alphabeta_ibv(board *brd, int alpha, int beta, int depth) {
 
    if (force_exact(max) == 4 * CHECKMATE) {
       // printf("yes? \n");
-      max = prev_wasnt_legal(brd, !brd->to_play) ? 4 * CHECKMATE : 0;
+      max = in_check(brd, brd->to_play) ? 4 * CHECKMATE : 0;
    }
 
    if (do_search)
@@ -178,14 +201,14 @@ search_res search(board *brd) {
    nps = 0;
    timespec_get(&timer, TIME_UTC);
    timespec_get(&start, TIME_UTC);
-   calc_move_time();
+   calc_move_time(brd);
    printf("info string search_time=%ld\n", search_time);
    printf("info string current time =%ld\n", timespec_to_int(&start));
    printf("info string search_soft_deadline=%ld\n", search_soft_deadline);
    printf("info string search_hard_deadline=%ld\n", search_hard_deadline);
    printf("info string searchdepth=%ld\n", searchdepth);
 
-   int depth = searchdepth > 0 ? searchdepth : 0;
+   int depth = searchdepth > 0 ? searchdepth - 1 : 0;
 
    printf("info string diff?? %ld\n",
           (timespec_to_int(&timer) - search_soft_deadline));
@@ -223,6 +246,12 @@ search_res search(board *brd) {
          ans.time = (uint64_t)(time_pass(&start, &timer) * 1000);
       }
       print_res(&ans);
+
+      // if we already have mate, then no need to look deeper
+      if (is_mating_score(best_score)) {
+         do_search = false;
+         break;
+      }
    }
 
    depth = 0;

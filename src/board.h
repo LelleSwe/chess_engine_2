@@ -158,16 +158,11 @@ DECLARE_ARR(castle_right, 4096)
 DECLARE_ARR(piece, 4096)
 DECLARE_ARR(bitboa, 4096)
 
-// debugging time
-// typedef unsigned _BitInt(800) zobrist;
-typedef uint64_t zobrist;
+// higher 64 bits for comparison and storing in TT
+// lower 64 bits (truncated) for lookup
+typedef unsigned _BitInt(128) zobrist;
+// typedef uint64_t zobrist;
 
-// clang-format off
-// idx 0 -> 767 for pieces, lookup by (1 << 767 * to_play) + (piece - 1) * square.
-// idx 768 - 775 for en passant file, lookup by 768 + (bitscan_lsb(bitboard) % 8)
-// idx 776 - 791 for castling rights, lookup by 6*64 + 8 + castle_right + 4 * (is white_castle ? 1 : 0) ??
-// idx 792 for side to move, lookup by 6*64+8+8 + to_play
-// clang-format on
 typedef struct {
    zobrist pieces[2][6][64];
    zobrist enp_file[8];
@@ -178,7 +173,7 @@ typedef struct {
 extern zobrist_lookup_t zobrist_lookup;
 
 typedef struct {
-   zobrist hash;
+   uint64_t hash;
    move best_move;
    // ibv scoring
    int score;
@@ -228,6 +223,7 @@ typedef struct {
    /// En passant.
    /// Overlaps the pawn that can passant.
    arr_bitboa4096 enp_history;
+   // arr_bitboa4096 attackers;
    arr_move4096 move_history;
    arr_castle_right4096 white_castle_history;
    arr_castle_right4096 black_castle_history;

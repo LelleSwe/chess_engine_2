@@ -885,6 +885,19 @@ bool prev_wasnt_legal(board *brd, bool to_play) {
    }
 }
 
+bool in_check(board *brd, bool to_play) {
+   bool prev = brd->to_play;
+   brd->to_play = !to_play;
+   bitboa attacks = get_attack_bb(brd);
+   brd->to_play = prev;
+
+   if (to_play) {
+      return attacks & brd->bki_bb;
+   } else {
+      return attacks & brd->wki_bb;
+   }
+}
+
 // doesn't check for king safety
 void get_pseudolegal_moves(board *brd, arr_move256 *move_list) {
    add_pawn_moves(brd, move_list);
