@@ -1,5 +1,6 @@
 #include "board.h"
 #include "debug_io.h"
+#include "movegen.h"
 #include <assert.h>
 #include <ctype.h>
 #include <stdio.h>
@@ -24,6 +25,8 @@ inline board gen_start_board() {
    arr_push_bitboa4096(&enp_history, 0);
    arr_int4096 move50count = new_arr_int4096();
    arr_push_int4096(&move50count, 0);
+   arr_zobrist4096 zobrist_history = new_arr_zobrist4096();
+   arr_push_zobrist4096(&zobrist_history, 0);
 
    board brd = {.wpa_bb = 0x000000000000FF00UL,
                 .wbi_bb = 0x0000000000000024UL,
@@ -44,7 +47,10 @@ inline board gen_start_board() {
                 .white_castle_history = white_castle_history,
                 .black_castle_history = black_castle_history,
                 .capture_history = captures,
-                .move50count = move50count};
+                .move50count = move50count,
+                .zobrist_history = zobrist_history};
+
+   init_zobrist(&brd);
    return brd;
 }
 
@@ -61,6 +67,8 @@ inline board gen_empty_board() {
    arr_push_bitboa4096(&enp_history, 0);
    arr_int4096 move50count = new_arr_int4096();
    arr_push_int4096(&move50count, 0);
+   arr_zobrist4096 zobrist_history = new_arr_zobrist4096();
+   arr_push_zobrist4096(&zobrist_history, 0);
 
    board brd = {.wpa_bb = 0x0000000000000000UL,
                 .wbi_bb = 0x0000000000000000UL,
@@ -81,7 +89,9 @@ inline board gen_empty_board() {
                 .white_castle_history = white_castle_history,
                 .black_castle_history = black_castle_history,
                 .capture_history = captures,
-                .move50count = move50count};
+                .move50count = move50count,
+                .zobrist_history = zobrist_history};
+   init_zobrist(&brd);
    return brd;
 }
 
@@ -239,6 +249,195 @@ inline bitboa comb_from_comp(const board *brd, bool to_play) {
    return ret;
 }
 
+DEFINE_ARR(zobrist, 4096)
+
+#define t_table_len 1 << 23
+tt_entry t_table[t_table_len] = {};
+
+zobrist_lookup_t zobrist_lookup = {};
+// setup for zobrist
+// annoying that we don't have constexpr functions
+static uint64_t zrand() {
+   static uint64_t rand_state = 17729132930264548489ULL;
+
+   uint64_t a = 7767583582733577769ULL;
+   uint64_t b = 9683582967429144733ULL;
+   uint64_t n = 10495531625819030881ULL;
+
+   rand_state = (rand_state * a + b) % n;
+   return rand_state;
+}
+
+void setup_zobrist() {
+   zobrist_lookup_t lookup = {};
+   for (int i = 0; i < 2; i++) {
+      for (int ii = 0; ii < 2; ii++) {
+         for (int iii = 0; iii < 64; iii++) {
+            lookup.pieces[i][ii][iii] = zrand();
+         }
+      }
+   }
+   for (int i = 0; i < 8; i++) {
+      lookup.castling[i & 0b100][i % 4] = zrand();
+      lookup.enp_file[i] = zrand();
+   }
+   lookup.to_play = zrand();
+   zobrist_lookup = lookup;
+}
+
+// for setting up zobrist lookup. Don't use during search.
+// TODO: switch to better random
+
+// clang-format off
+// idx 0 -> 767 for pieces, lookup by (1 << 767 * to_play) + (piece - 1) * square.
+// idx 768 - 775 for en passant file, lookup by 768 + (bitscan_lsb(bitboard) % 8)
+// idx 776 - 791 for castling rights, lookup by 6*64 + 8 + castle_right + 4 * (is white_castle ? 1 : 0) ??
+// idx 792 for side to move, lookup by 6*64+8+8 + to_play
+// clang-format on
+void flip_hash(board *brd, square from, square to, piece promote, piece pc,
+               piece capture) {
+   zobrist zobrist_state =
+       arr_get_zobrist4096(&brd->zobrist_history, brd->ply_count);
+   // piece moved
+   zobrist_state ^= zobrist_lookup.pieces[brd->to_play][pc - 1][from];
+   // captures?
+   if (capture != NO_PIECE) {
+      zobrist_state ^= zobrist_lookup.pieces[!brd->to_play][capture - 1][to];
+   }
+   // promotion?
+   // if not, then piece moved to
+   if (promote == NO_PIECE) {
+      zobrist_state ^= zobrist_lookup.pieces[brd->to_play][pc - 1][to];
+   } else {
+      zobrist_state ^= zobrist_lookup.pieces[brd->to_play][promote - 1][to];
+   }
+   // en passant file?
+   bitboa enp_old = arr_get_bitboa4096(&brd->enp_history, brd->ply_count - 1);
+   bitboa enp_new = arr_get_bitboa4096(&brd->enp_history, brd->ply_count);
+   if (enp_old != 0)
+      zobrist_state ^= zobrist_lookup.enp_file[bitscan_lsb(enp_old) % 8];
+   if (enp_new != 0)
+      zobrist_state ^= zobrist_lookup.enp_file[bitscan_lsb(enp_new) % 8];
+
+   zobrist prev = zobrist_state;
+   // castling rights?
+   castle_right white_old =
+       arr_get_castle_right4096(&brd->white_castle_history, brd->ply_count - 1);
+   castle_right white_new =
+       arr_get_castle_right4096(&brd->white_castle_history, brd->ply_count);
+   castle_right black_old =
+       arr_get_castle_right4096(&brd->black_castle_history, brd->ply_count - 1);
+   castle_right black_new =
+       arr_get_castle_right4096(&brd->black_castle_history, brd->ply_count);
+   zobrist_state ^= zobrist_lookup.castling[brd->to_play][white_new] ^
+                    zobrist_lookup.castling[brd->to_play][white_old];
+   zobrist_state ^= zobrist_lookup.castling[brd->to_play][black_new] ^
+                    zobrist_lookup.castling[brd->to_play][black_old];
+
+   // side to play
+   zobrist_state ^= zobrist_lookup.to_play;
+
+   arr_set_zobrist4096(&brd->zobrist_history, brd->ply_count, zobrist_state);
+}
+
+// literally only used for en passant bruh
+// TODO: refactoring?
+inline void flip_hash_piece(board *brd, bitboa pos, bool to_play, piece pc) {
+   zobrist zobrist_state =
+       arr_get_zobrist4096(&brd->zobrist_history, brd->ply_count);
+   zobrist_state ^= zobrist_lookup.pieces[to_play][pc - 1][bitscan_lsb(pos)];
+   arr_set_zobrist4096(&brd->zobrist_history, brd->ply_count, zobrist_state);
+}
+
+void clear_zobrist(board *brd) {
+   zobrist zobrist_state = 12542939404960382801ULL;
+   arr_set_zobrist4096(&brd->zobrist_history, brd->ply_count, zobrist_state);
+}
+
+zobrist zobrist_all_one_color(board *brd, zobrist zobrist_state, bool to_play) {
+   BEGIN_FOREACH_BB(to_play ? brd->bpa_bb : brd->wpa_bb, pos) {
+      zobrist_state ^= zobrist_lookup.pieces[to_play][PAWN - 1][pos];
+   }
+   END_FOREACH_BB();
+   BEGIN_FOREACH_BB(to_play ? brd->bbi_bb : brd->wbi_bb, pos) {
+      zobrist_state ^= zobrist_lookup.pieces[to_play][BISHOP - 1][pos];
+   }
+   END_FOREACH_BB();
+   BEGIN_FOREACH_BB(to_play ? brd->bro_bb : brd->wro_bb, pos) {
+      zobrist_state ^= zobrist_lookup.pieces[to_play][ROOK - 1][pos];
+   }
+   END_FOREACH_BB();
+   BEGIN_FOREACH_BB(to_play ? brd->bki_bb : brd->wki_bb, pos) {
+      zobrist_state ^= zobrist_lookup.pieces[to_play][KING - 1][pos];
+   }
+   END_FOREACH_BB();
+   BEGIN_FOREACH_BB(to_play ? brd->bqu_bb : brd->wqu_bb, pos) {
+      zobrist_state ^= zobrist_lookup.pieces[to_play][QUEEN - 1][pos];
+   }
+   END_FOREACH_BB();
+   BEGIN_FOREACH_BB(to_play ? brd->bkn_bb : brd->wkn_bb, pos) {
+      zobrist_state ^= zobrist_lookup.pieces[to_play][KNIGHT - 1][pos];
+   }
+   END_FOREACH_BB();
+   return zobrist_state;
+}
+
+void init_zobrist(board *brd) {
+   zobrist zobrist_state = 12542939404960382801ULL;
+
+   // en passant
+   bitboa enp = arr_get_bitboa4096(&brd->enp_history, brd->ply_count);
+   if (enp != 0) {
+      zobrist_state ^= zobrist_lookup.enp_file[bitscan_lsb(enp) % 8];
+   }
+
+   // white pieces
+   zobrist_state = zobrist_all_one_color(brd, zobrist_state, false);
+   // black pieces
+   zobrist_state = zobrist_all_one_color(brd, zobrist_state, true);
+
+   // castling
+   castle_right white_new =
+       arr_get_castle_right4096(&brd->white_castle_history, brd->ply_count);
+   castle_right black_new =
+       arr_get_castle_right4096(&brd->black_castle_history, brd->ply_count);
+   zobrist_state ^= zobrist_lookup.castling[false][white_new];
+   zobrist_state ^= zobrist_lookup.castling[true][black_new];
+
+   // side to play
+   if (brd->to_play)
+      zobrist_state ^= zobrist_lookup.to_play;
+   arr_set_zobrist4096(&brd->zobrist_history, brd->ply_count, zobrist_state);
+}
+
+inline tt_entry *tt_get(zobrist hash) { return &t_table[hash % t_table_len]; }
+
+inline bool tt_exists(zobrist hash) {
+   tt_entry *ent = &t_table[hash % t_table_len];
+   if (ent->hash != hash)
+      return false;
+   if (ent->hash == 0 && ent->best_move == 0 && ent->depth == 0 &&
+       ent->score == 0)
+      return false;
+
+   return true;
+}
+
+inline void tt_set(zobrist hash, move best_move, int ibv_score, int depth) {
+   // if (tt_exists(hash)) {
+   //    tt_entry *alr = tt_get(hash);
+   //    if (alr->depth >= depth) {
+   //       return;
+   //    }
+   // }
+
+   tt_entry entry = {.hash = hash,
+                     .best_move = best_move,
+                     .score = ibv_score,
+                     .depth = depth};
+   t_table[hash % t_table_len] = entry;
+}
+
 inline square from_move(const move mov) { return mov & 0b111111; }
 inline square to_move(const move mov) { return (mov >> 6) & 0b111111; }
 inline piece promotion_move(const move mov) { return (mov >> 12) & 0b111; }
@@ -324,17 +523,18 @@ void flip_piece(board *brd, const piece pc, const bool to_play,
 }
 
 inline void try_capture(board *brd, const bitboa place) {
+   piece capture = get_piece(brd, place);
    if (brd->to_play) {
       if (brd->wcb_bb & place) {
 
-         flip_piece(brd, get_piece(brd, place), false, place);
+         flip_piece(brd, capture, false, place);
          // 50 move draw rule
          arr_set_int4096(&brd->move50count, brd->ply_count, 0);
       }
    } else {
       if (brd->bcb_bb & place) {
 
-         flip_piece(brd, get_piece(brd, place), true, place);
+         flip_piece(brd, capture, true, place);
          // 50 move draw rule
          arr_set_int4096(&brd->move50count, brd->ply_count, 0);
       }
@@ -357,6 +557,10 @@ inline bool try_castle(board *brd, const piece pc, const bitboa from,
          arr_set_castle_right4096(&brd->black_castle_history, brd->ply_count,
                                   NO_CASTLE);
          arr_set_bitboa4096(&brd->enp_history, brd->ply_count, 0);
+
+         // update zobrist hash
+         flip_hash_piece(brd, from_square(h8), true, ROOK);
+         flip_hash_piece(brd, from_square(f8), true, ROOK);
          return true;
       }
       // long castle black
@@ -372,6 +576,10 @@ inline bool try_castle(board *brd, const piece pc, const bitboa from,
          arr_set_castle_right4096(&brd->black_castle_history, brd->ply_count,
                                   NO_CASTLE);
          arr_set_bitboa4096(&brd->enp_history, brd->ply_count, 0);
+
+         // update zobrist hash
+         flip_hash_piece(brd, from_square(a8), true, ROOK);
+         flip_hash_piece(brd, from_square(d8), true, ROOK);
          return true;
       }
    } else {
@@ -388,6 +596,10 @@ inline bool try_castle(board *brd, const piece pc, const bitboa from,
          arr_set_castle_right4096(&brd->white_castle_history, brd->ply_count,
                                   NO_CASTLE);
          arr_set_bitboa4096(&brd->enp_history, brd->ply_count, 0);
+
+         // update zobrist hash
+         flip_hash_piece(brd, from_square(h1), false, ROOK);
+         flip_hash_piece(brd, from_square(f1), false, ROOK);
          return true;
       }
       // long castle white
@@ -403,6 +615,10 @@ inline bool try_castle(board *brd, const piece pc, const bitboa from,
          arr_set_castle_right4096(&brd->white_castle_history, brd->ply_count,
                                   NO_CASTLE);
          arr_set_bitboa4096(&brd->enp_history, brd->ply_count, 0);
+
+         // update zobrist hash
+         flip_hash_piece(brd, from_square(a1), false, ROOK);
+         flip_hash_piece(brd, from_square(d1), false, ROOK);
          return true;
       }
    }
@@ -430,6 +646,9 @@ inline bool try_en_passant(board *brd, const piece pc, const bitboa from,
          flip_piece(brd, PAWN, !(brd->to_play), enp);
          flip_piece(brd, PAWN, brd->to_play, from);
          flip_piece(brd, PAWN, brd->to_play, to);
+
+         // zobrist state
+         flip_hash_piece(brd, enp, !(brd->to_play), PAWN);
          return true;
       }
    }
@@ -443,8 +662,10 @@ void make_move(board *brd, const move mov) {
    // so ply_count affects current move,
    // and ply_count-1 is last move
    brd->ply_count++;
-   bitboa to = from_square(to_move(mov));
-   bitboa from = from_square(from_move(mov));
+   square to_sq = to_move(mov);
+   square from_sq = from_move(mov);
+   bitboa to = from_square(to_sq);
+   bitboa from = from_square(from_sq);
    piece promote = promotion_move(mov);
    piece capture = get_piece(brd, to);
    piece pc = get_piece(brd, from);
@@ -460,12 +681,16 @@ void make_move(board *brd, const move mov) {
    arr_push_piece4096(&brd->capture_history, capture);
    arr_push_int4096(&brd->move50count,
                     arr_get_int4096(&brd->move50count, brd->ply_count - 1) + 1);
+   arr_push_zobrist4096(
+       &brd->zobrist_history,
+       arr_get_zobrist4096(&brd->zobrist_history, brd->ply_count - 1));
 
    // 50 move draw rule
    if (pc == PAWN)
       arr_set_int4096(&brd->move50count, brd->ply_count, 0);
 
    if (try_castle(brd, pc, from, to)) {
+      flip_hash(brd, from_sq, to_sq, promote, pc, capture);
       brd->to_play = !brd->to_play;
       return;
    }
@@ -484,14 +709,16 @@ void make_move(board *brd, const move mov) {
    }
 
    if (try_promote(brd, promote, from, to)) {
-      brd->to_play = !brd->to_play;
       arr_set_castle_right4096(&brd->white_castle_history, brd->ply_count,
                                white_castle);
       arr_set_castle_right4096(&brd->black_castle_history, brd->ply_count,
                                black_castle);
+      flip_hash(brd, from_sq, to_sq, promote, pc, capture);
+      brd->to_play = !brd->to_play;
       return;
    }
    if (try_en_passant(brd, pc, from, to)) {
+      flip_hash(brd, from_sq, to_sq, promote, pc, capture);
       brd->to_play = !brd->to_play;
       return;
    }
@@ -516,11 +743,12 @@ void make_move(board *brd, const move mov) {
       }
    }
 
-   brd->to_play = !brd->to_play;
    arr_set_castle_right4096(&brd->white_castle_history, brd->ply_count,
                             white_castle);
    arr_set_castle_right4096(&brd->black_castle_history, brd->ply_count,
                             black_castle);
+   flip_hash(brd, from_sq, to_sq, promote, pc, capture);
+   brd->to_play = !brd->to_play;
 }
 
 /// Gets the piece type at the position asked.
@@ -646,20 +874,22 @@ bool try_undo_promote(board *brd, const piece promotion, const bitboa from,
    return false;
 }
 void undo_move(board *brd, const move mov) {
-   brd->to_play = !brd->to_play;
-
-   arr_drop_bitboa4096(&brd->enp_history);
-
-   bitboa to = from_square(to_move(mov));
-   bitboa from = from_square(from_move(mov));
+   square to_sq = to_move(mov);
+   square from_sq = from_move(mov);
+   bitboa to = from_square(to_sq);
+   bitboa from = from_square(from_sq);
    piece promote = promotion_move(mov);
-   piece capture = arr_pop_piece4096(&brd->capture_history);
+   piece capture = arr_get_piece4096(&brd->capture_history, brd->ply_count);
    piece pc = get_piece(brd, to);
 
+   brd->to_play = !brd->to_play;
    arr_drop_move4096(&brd->move_history);
    arr_drop_castle_right4096(&brd->white_castle_history);
    arr_drop_castle_right4096(&brd->black_castle_history);
    arr_drop_int4096(&brd->move50count);
+   arr_drop_bitboa4096(&brd->enp_history);
+   arr_drop_piece4096(&brd->capture_history);
+   arr_drop_zobrist4096(&brd->zobrist_history);
 
    if (try_undo_castle(brd, from, to, pc)) {
       brd->ply_count--;
@@ -866,6 +1096,7 @@ int from_fen(const char *alg_string, board *brd) {
    }
 
    int moves = atoi(movesc);
+   init_zobrist(brd);
    return idx - 1;
 }
 

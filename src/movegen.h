@@ -96,4 +96,16 @@ bitboa get_hypquin_rank(bitboa occ, square pc);
 #define END_FOREACH_MOVE()                                                     \
    }                                                                           \
    undo_move(brd, mov);                                                        \
-   }\
+   }
+
+#define BEGIN_FOREACH_BB(bitboard, pos)                                        \
+   do {                                                                        \
+      bitboa rigoriosgos = bitboard;                                           \
+      while (rigoriosgos != 0) {                                               \
+         square pos = bitscan_lsb(rigoriosgos);                                \
+         rigoriosgos &= rigoriosgos - 1;
+
+#define END_FOREACH_BB()                                                       \
+   }                                                                           \
+   }                                                                           \
+   while (0)

@@ -137,6 +137,33 @@ constexpr int eg_king_table[64] = {
     -53, -34, -21, -11, -28, -14, -24, -43
 };
 
+// PAWN = 1, val = 0
+// BISHOP = 2, val = 1
+// ROOK = 3, val = 2
+// QUEEN = 4, val = 4
+// KING = 5, val = 0
+// KNIGHT = 6, val = 1
+constexpr int game_phase[7] = {0, 0, 1, 2, 4, 0 ,1,};
+constexpr int mg_value[7] = {
+   0, 
+   82, 
+   365, 
+   477, 
+   1025, 
+   0,
+   337
+}; 
+constexpr int eg_value[7] = {
+   0,
+   94, 
+   297, 
+   512,  
+   936, 
+   0,
+   281 
+};
+
+
 // constexpr int* mg_pesto_table[6] =
 // {
 //     mg_pawn_table,

@@ -1,6 +1,7 @@
 #include "../lib/unity.h"
 #include "../src/board.h"
 #include "../src/debug_io.h"
+#include "../src/movegen.h"
 
 void test_set_up_board() {
    board brd = gen_start_board();
@@ -371,12 +372,8 @@ void test_undo_en_passant() {
    from_fen("8/8/8/8/3p4/8/4P3/8 w - - 0 1", &expect);
 
    undo_move(&brd, mov2);
-   // print_board(&brd);
    undo_move(&brd, mov1);
-   // print_board(&brd);
 
-   // print_board_internal(&brd);
-   // print_board_internal(&expect);
    TEST_ASSERT_MESSAGE(board_cmp_bb(&expect, &brd), "Final boards not equal");
 }
 
@@ -413,7 +410,144 @@ void test_undo_castle_short() {
    TEST_ASSERT_MESSAGE(board_cmp_bb(&brd, &expect), "second undo failed");
 }
 
+void test_zobrist_make_unmake() {
+   board brd = gen_start_board();
+   init_zobrist(&brd);
+   zobrist start = arr_get_zobrist4096(&brd.zobrist_history, brd.ply_count);
+   move mov = move_from(e2, e4);
+   // printf("hash? %lu\n", start);
+
+   make_move(&brd, mov);
+   // printf("hash? %lu\n", *arr_last_zobrist4096(&brd.zobrist_history));
+   undo_move(&brd, mov);
+
+   // for (int i = 0; i < 20; i++) {
+   //    printf("%lu\n", zobrist_lookup.pieces[1][1][i]);
+   // }
+
+   zobrist end = arr_get_zobrist4096(&brd.zobrist_history, brd.ply_count);
+   // printf("hash? %lu\n", end);
+   TEST_ASSERT_EQUAL(start, end);
+}
+
+void test_zobrist_capture() {
+   board brd = gen_start_board();
+   init_zobrist(&brd);
+   zobrist start = arr_get_zobrist4096(&brd.zobrist_history, brd.ply_count);
+   move mov = move_from(e2, e7);
+
+   make_move(&brd, mov);
+   undo_move(&brd, mov);
+
+   zobrist end = arr_get_zobrist4096(&brd.zobrist_history, brd.ply_count);
+   TEST_ASSERT_EQUAL(start, end);
+}
+
+void test_zobrist_undo() {
+   board brd = gen_start_board();
+   init_zobrist(&brd);
+   zobrist start = arr_get_zobrist4096(&brd.zobrist_history, brd.ply_count);
+
+   char input_str[] = "e2e4 d7d5 e4d5 g8f6 d1f3 c7c5 d5c6 d8b6 c6c7 c8d7 c7b8r "
+                      "b6d8 f1e2 h7h5 g1h3 h5h4 e1g1";
+   from_long_algebraic(input_str, &brd);
+
+   while (brd.move_history.size > 1) {
+      undo_move(&brd, arr_get_move4096(&brd.move_history, brd.ply_count));
+   }
+
+   zobrist end = arr_get_zobrist4096(&brd.zobrist_history, brd.ply_count);
+   // printf("%llu %llu\n", start, end);
+   TEST_ASSERT_EQUAL(start, end);
+}
+
+void test_zobrist_init() {
+   board brd = gen_start_board();
+   init_zobrist(&brd);
+   // zobrist start = zobrist_state;
+
+   char input_str[] = "e2e4 d7d5 e4d5 g8f6 d1f3 c7c5 d5c6 d8b6 c6c7 c8d7 c7b8r "
+                      "b6d8 f1e2 h7h5 g1h3 h5h4 e1g1";
+   from_long_algebraic(input_str, &brd);
+   zobrist end = arr_get_zobrist4096(&brd.zobrist_history, brd.ply_count);
+   from_fen("rR1qkb1r/pp1bppp1/5n2/8/7p/5Q1N/PPPPBPPP/RNB2RK1 b kq - 1 9",
+            &brd);
+   zobrist end2 = arr_get_zobrist4096(&brd.zobrist_history, brd.ply_count);
+
+   // printf("%llu %llu\n", end, end2);
+   TEST_ASSERT_EQUAL(end, end2);
+}
+
+void test_zobrist_init_no_castle() {
+   board brd = gen_start_board();
+   init_zobrist(&brd);
+   // zobrist start = zobrist_state;
+
+   char input_str[] = "e2e4 d7d5 e4d5 g8f6 d1f3 c7c5 d5c6 d8b6 c6c7 c8d7 c7b8r "
+                      "b6d8 f1e2 h7h5 g1h3 h5h4";
+   from_long_algebraic(input_str, &brd);
+   zobrist end = arr_get_zobrist4096(&brd.zobrist_history, brd.ply_count);
+
+   from_fen("rR1qkb1r/pp1bppp1/5n2/8/7p/5Q1N/PPPPBPPP/RNB1K2R w KQkq - 0 9",
+            &brd);
+   zobrist end2 = arr_get_zobrist4096(&brd.zobrist_history, brd.ply_count);
+
+   // printf("%llu %llu\n", end, end2);
+   TEST_ASSERT_EQUAL(end, end2);
+}
+
+void test_zobrist_init_one_move() {
+   board brd = gen_start_board();
+
+   char input_str[] = "e2e4";
+   from_long_algebraic(input_str, &brd);
+   zobrist end = arr_get_zobrist4096(&brd.zobrist_history, brd.ply_count);
+
+   zobrist zobrist_state = 0;
+   // en passant file ?
+   bitboa enp = arr_get_bitboa4096(&brd.enp_history, brd.ply_count);
+   if (enp != 0) {
+      zobrist_state = zobrist_lookup.enp_file[bitscan_lsb(enp) % 8];
+   }
+
+   from_fen("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
+            &brd);
+   zobrist end2 = arr_get_zobrist4096(&brd.zobrist_history, brd.ply_count);
+
+   TEST_ASSERT_EQUAL(end2, end);
+}
+
+void test_zobrist_init_capture() {
+   board brd = gen_start_board();
+
+   char input_str[] = "b1c3 d7d5 c3d5";
+   from_long_algebraic(input_str, &brd);
+   zobrist end = arr_get_zobrist4096(&brd.zobrist_history, brd.ply_count);
+
+   from_fen("rnbqkbnr/ppp1pppp/8/3N4/8/8/PPPPPPPP/R1BQKBNR b KQkq - 0 2", &brd);
+   zobrist end2 = arr_get_zobrist4096(&brd.zobrist_history, brd.ply_count);
+
+   TEST_ASSERT_EQUAL(end2, end);
+}
+
+void test_zobrist_init_en_passant() {
+   board brd = gen_start_board();
+
+   char input_str[] = "e2e4 b7b6 e4e5 d7d5 e5d6";
+   from_long_algebraic(input_str, &brd);
+   zobrist end = arr_get_zobrist4096(&brd.zobrist_history, brd.ply_count);
+
+   from_fen("rnbqkbnr/p1p1pppp/1p1P4/8/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 3",
+            &brd);
+   zobrist end2 = arr_get_zobrist4096(&brd.zobrist_history, brd.ply_count);
+
+   TEST_ASSERT_EQUAL(end2, end);
+}
+
 int run_test_board() {
+   generate_tables();
+   setup_zobrist();
+
    UNITY_BEGIN();
    RUN_TEST(test_set_up_board);
    RUN_TEST(test_get_piece_start_board);
@@ -429,5 +563,15 @@ int run_test_board() {
    RUN_TEST(test_undo_en_passant);
    RUN_TEST(test_undo_castle_short);
    RUN_TEST(test_undo_moves);
+
+   // zobrist hashing
+   RUN_TEST(test_zobrist_make_unmake);
+   RUN_TEST(test_zobrist_capture);
+   RUN_TEST(test_zobrist_undo);
+   RUN_TEST(test_zobrist_init);
+   RUN_TEST(test_zobrist_init_no_castle);
+   RUN_TEST(test_zobrist_init_one_move);
+   RUN_TEST(test_zobrist_init_capture);
+   RUN_TEST(test_zobrist_init_en_passant);
    return UNITY_END();
 }

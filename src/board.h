@@ -157,6 +157,36 @@ DECLARE_ARR(int, 4096)
 DECLARE_ARR(castle_right, 4096)
 DECLARE_ARR(piece, 4096)
 DECLARE_ARR(bitboa, 4096)
+
+// debugging time
+// typedef unsigned _BitInt(800) zobrist;
+typedef uint64_t zobrist;
+
+// clang-format off
+// idx 0 -> 767 for pieces, lookup by (1 << 767 * to_play) + (piece - 1) * square.
+// idx 768 - 775 for en passant file, lookup by 768 + (bitscan_lsb(bitboard) % 8)
+// idx 776 - 791 for castling rights, lookup by 6*64 + 8 + castle_right + 4 * (is white_castle ? 1 : 0) ??
+// idx 792 for side to move, lookup by 6*64+8+8 + to_play
+// clang-format on
+typedef struct {
+   zobrist pieces[2][6][64];
+   zobrist enp_file[8];
+   zobrist castling[2][4];
+   zobrist to_play;
+} zobrist_lookup_t;
+
+extern zobrist_lookup_t zobrist_lookup;
+
+typedef struct {
+   zobrist hash;
+   move best_move;
+   // ibv scoring
+   int score;
+   int depth;
+} tt_entry;
+
+DECLARE_ARR(zobrist, 4096)
+
 #endif
 // 768 bits.
 // white pawn bitboard.
@@ -203,6 +233,7 @@ typedef struct {
    arr_castle_right4096 black_castle_history;
    arr_piece4096 capture_history;
    arr_int4096 move50count;
+   arr_zobrist4096 zobrist_history;
 } board;
 
 #endif
@@ -247,3 +278,16 @@ bool try_undo_en_passant(board *brd, const piece pc, const bitboa from,
 bool try_undo_promote(board *brd, const piece promotion, const bitboa from,
                       const bitboa to, const piece capture);
 void undo_move(board *brd, const move mov);
+
+// for zobrist hashes
+void flip_hash(board *brd, square from, square to, piece promote, piece pc,
+               piece capture);
+void flip_hash_piece(board *brd, bitboa pos, bool to_play, piece pc);
+void clear_zobrist(board *brd);
+void init_zobrist(board *brd);
+void setup_zobrist();
+
+// for transposition table
+tt_entry *tt_get(zobrist hash);
+bool tt_exists(zobrist hash);
+void tt_set(zobrist hash, move best_move, int ibv_score, int depth);

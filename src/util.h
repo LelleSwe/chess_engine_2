@@ -77,8 +77,8 @@
                                    const size_t idx) {                         \
       if (!arr_unsafe_ops && (idx >= (arr->size))) {                           \
          printf("ERROR: array of type %s with size %zu tried to get at "       \
-                "index %zu. File %s and line %d.\n",                           \
-                #type, arr->size, idx, __FILE__, __LINE__);                    \
+                "index %zu. File %s and line %d %s.\n",                        \
+                #type, arr->size, idx, __FILE__, __LINE__, __func__);          \
          exit(EXIT_FAILURE);                                                   \
       }                                                                        \
       type elem = (arr->data)[idx];                                            \

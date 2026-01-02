@@ -8,6 +8,7 @@ int main() {
    // Generate starting board
    board brd; // = gen_start_board();
    generate_tables();
+   setup_zobrist();
 
    // Start UCI thread
    // pthread_t uci_id = 69;

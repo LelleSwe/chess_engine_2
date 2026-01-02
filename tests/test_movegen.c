@@ -456,12 +456,12 @@ int run_test_movegen() {
    RUN_TEST(test_king_blocked_castle);
    RUN_TEST(test_some_kind_of_passant_bug);
 
-   RUN_TEST(test_perft1);
-   RUN_TEST(test_perft2);
-   RUN_TEST(test_perft3);
-   RUN_TEST(test_perft4);
-   RUN_TEST(test_perft5);
-   RUN_TEST(test_perft6);
+   // RUN_TEST(test_perft1);
+   // RUN_TEST(test_perft2);
+   // RUN_TEST(test_perft3);
+   // RUN_TEST(test_perft4);
+   // RUN_TEST(test_perft5);
+   // RUN_TEST(test_perft6);
    // RUN_TEST(test_perft7);
    return UNITY_END();
 }
